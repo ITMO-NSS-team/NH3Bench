@@ -1,0 +1,38 @@
+{
+ "system_chars": 11449,
+ "episodes": {
+  "S1": {
+   "calls": 5,
+   "user_chars_total": 12084,
+   "user_chars_mean": 2417,
+   "user_chars_max": 2637
+  },
+  "S2": {
+   "calls": 21,
+   "user_chars_total": 57388,
+   "user_chars_mean": 2733,
+   "user_chars_max": 3112
+  },
+  "S3": {
+   "calls": 37,
+   "user_chars_total": 130766,
+   "user_chars_mean": 3534,
+   "user_chars_max": 3892
+  },
+  "S4": {
+   "calls": 12,
+   "user_chars_total": 36626,
+   "user_chars_mean": 3052,
+   "user_chars_max": 3520
+  },
+  "S5": {
+   "calls": 22,
+   "user_chars_total": 64992,
+   "user_chars_mean": 2954,
+   "user_chars_max": 3480
+  }
+ },
+ "total_calls": 97,
+ "total_user_chars": 301856,
+ "total_system_chars": 1110553
+}

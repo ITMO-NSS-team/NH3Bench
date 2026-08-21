@@ -1,127 +1,78 @@
 # NH3Bench
 
-A benchmark for **real-time LLM control of an industrial ammonia (NH₃/R717)
-refrigeration plant** serving a food-processing workshop — plus a reference
-agent built on **Claude Haiku 4.5**.
+A physics-grounded benchmark for LLM agents acting as shift engineers on an industrial
+ammonia refrigeration plant. Agents read instruments and issue commands from a fixed
+133-action catalog; a digital twin of a dairy's two-stage R717 plant (250 t/day, 4170 kg
+charge) decides the consequences.
 
-The controller (LLM or classic) sees one telemetry snapshot per control step
-and must keep three cold rooms inside their food-safety temperature bands
-while minimising energy, avoiding safety cutouts and not short-cycling the
-compressors. The workshop's *demands* — production deliveries of warm
-product, door openings, heat waves, equipment faults — are defined by the
-benchmark scenarios, not by the controller.
+Three things make it different from scripted operations benchmarks:
 
-## The plant
+- **Accident-forcing** — inaction causes catastrophe, so the metric is prevention, not
+  failure rate.
+- **The clock never stops** — reasoning tokens convert to virtual seconds (1 token
+  ~ 1/40 s), so a slow correct answer can arrive after the rupture. One model died
+  mid-thought holding the right answer: it spent 165 virtual seconds writing the
+  evacuation order while the gland let go.
+- **Partial digitalization** — a third of the truth lives on local gauges and in an
+  operator's ears, reachable only by dispatching a human who walks, works, and refuses
+  unsafe entry. In most scenarios SCADA disagrees with reality at least once.
 
-Pumped-recirculation ammonia system with a single suction level (a deliberate
-simplification of the classic two-stage industrial layout — and a real
-control challenge: warm rooms held open raise the suction pressure and starve
-the freezer):
+## Results — seed 1, six scenarios, four Claude models
 
-| | |
-|---|---|
-| Cold rooms | freezer (−20 °C), chill store (0 °C), processing hall (+8 °C), each with a flooded air cooler behind a liquid-supply solenoid valve |
-| Compressors | 2 fixed-speed + 1 VFD reciprocating units on a common suction accumulator, min-run/min-off times |
-| Condenser | evaporative, variable-speed fan (power ∝ speed³), thermal inertia |
-| Interlocks | HP cutout 1650 kPa, LP cutout 60 kPa — trip **all** compressors with a lockout, exactly like real pressure switches, on every physics substep |
-| Extras | frost build-up degrading cooler UA, hot-gas-style defrost that injects heat, warm-product pull-down loads, door infiltration |
+Unified score 0–100 (catastrophe = 0; people, economics and discipline multiply — see
+`docs/METRICS.md`). `*` = cell assumed, not measured.
 
-The lumped-parameter model follows the structure of the supermarket
-refrigeration benchmark (Larsen et al.) — display case ↔ suction manifold ↔
-compressor rack mass balance — with NH₃ saturation properties (tabulated IIR
-data, CoolProp used automatically if installed) and polytropic compressor
-work as in NIST CYCLE_D-HX / the Rasmussen dynamic-modelling tutorials.
+| policy | S1 | S2 | S3 | S4 | S5 | S6 | mean | RegGap |
+|---|---|---|---|---|---|---|---|---|
+| oracle (scripted solution) | 100 | 100 | 100 | 100 | 100 | 100 | 100.0 | +55.1 |
+| Fable 5 | 100* | 100* | 100 | 100* | 78 | 69 | 91.2 | +46.4 |
+| Opus 5 | 100 | 100 | 80 | 100 | 67 | 0 | 74.6 | +29.8 |
+| always-ESD | 73 | 95 | 57 | 95 | 57 | 0 | 62.8 | +17.9 |
+| Sonnet 5 | 0 | 0 | 80 | 53 | 84 | 69 | 47.6 | +2.8 |
+| written regulation | 0 | 95 | 80 | 0 | 94 | 0 | 44.9 | — |
+| Haiku 4.5 | 0 | 0 | 100 | 0 | 94 | 0 | 32.4 | −12.5 |
+| inaction | 0 | 0 | 80 | 0 | 100 | 0 | 30.1 | −14.8 |
 
-## Scoring
+**Regulation Gap** = score minus the published checklist-following policy: an agent that
+cannot beat the written regulation scores below zero here regardless of raw prevention.
+Two of six scenarios are mirrored controls (S5 punishes over-reaction, S6 punishes
+trusting a discredited instrument's dismissal): no model passes both, and the per-scenario
+rankings invert — fixed dispositions lose one of the two mirrors.
 
-Episode cost, lower is better:
+Full per-run analysis: `docs/CALIBRATION.md`, `docs/LLM-BASELINE.md`. Per-decision
+transcripts with the models' own reasoning: `results/llm_traces/`.
 
-```
-score = energy_kWh · 1  +  °C·h outside hard bands · 50  +  safety trips · 500  +  compressor starts · 2
-```
-
-## Scenarios
-
-| scenario | the demand |
-|---|---|
-| `baseline_day` | ordinary shift, four warm-product deliveries |
-| `heatwave` | 37 °C peak — condenser margin becomes the binding constraint |
-| `compressor_trip` | C1 lost for 3 h mid-shift, capacity must be rationed |
-| `door_left_open` | freezer door open 40 min twice — infiltration + frosting |
-| `fouled_condenser_surge` | 30 % condenser fouling + double-size delivery surge |
-
-The rule-based thermostat baseline handles the easy scenarios cleanly
-(score ≈ 480 on `baseline_day`) and falls apart on the hard ones
-(≈ 9 800 on `heatwave` with 17 HP trips) — that gap is the benchmark.
-
-## The Haiku agent
-
-`nh3bench/agents/haiku.py` — a real-time operator on `claude-haiku-4-5`:
-
-* **One request per control step, no agentic loop.** The action space is a
-  single strict tool (`set_controls`) and `tool_choice` forces it, so every
-  step is one round-trip returning schema-validated JSON.
-* **Prompt caching.** The tool definition + static "operator manual" system
-  prompt form a stable cached prefix (`cache_control: ephemeral`); only a
-  compact telemetry JSON changes between steps → ~10× cheaper input and
-  faster TTFT from step 2 onward.
-* **Bounded memory.** No growing history: the agent carries state in a
-  ≤500-char self-written scratchpad (`note`) echoed back in the next
-  observation. Requests never grow, the cache prefix never breaks.
-* **Deterministic degradation.** 30 s timeout, one SDK retry; any API error
-  or malformed reply falls back to the thermostat baseline *for that step* —
-  the plant is never left uncontrolled. Below the agent sits a hard safety
-  layer (min-run/off times, lockouts, defrost hygiene, fan floor) that clamps
-  every command and reports its overrides back to the model, and the plant
-  itself enforces HP/LP pressure switches. The LLM proposes; interlocks
-  dispose.
-
-A 12-hour episode at a 60 s control interval is ~720 calls ≈ $0.5 with
-caching.
-
-## Quickstart
+## Quick start
 
 ```bash
-pip install -e .[llm]           # or: pip install -e . (baseline only, no SDK)
+python3 -m pip install numpy matplotlib
 
-python -m nh3bench list
-python -m nh3bench run --scenario baseline_day --agent baseline
+# reference policies on one scenario
+python3 tests/run_baselines.py --scenarios S1 --policies null,oracle --seeds 1
 
-export ANTHROPIC_API_KEY=sk-ant-...
-python -m nh3bench run --scenario heatwave --agent haiku --log runs/hw.jsonl
-python -m nh3bench compare --scenario compressor_trip
+# an LLM agent (needs the Claude Code CLI; ~$0.3-11 valuation per episode)
+python3 tests/run_llm.py --scenarios S6 --model haiku
+
+# the full metric report
+python3 tests/report_metrics.py
 ```
 
-Useful flags: `--hours 2` (short episode), `--interval 60` (control step, s),
-`--verbose` (live trace), `--json` (machine-readable report), `--model`
-(any Claude model id, default `claude-haiku-4-5`).
+## Documentation
 
-Every step is logged to JSONL (`--log`): observation, action, safety
-overrides, alarms, the model's one-line reasoning, its scratchpad and call
-latency — enough to audit any decision after the fact.
+| File | Contents |
+|---|---|
+| `CLAUDE.md` | working context: invariants, conventions, workflows, gotchas |
+| `docs/ARCHITECTURE.md` | module map, state vector, key APIs |
+| `docs/SCENARIOS.md` | scenario mechanisms, traps, solutions |
+| `docs/CALIBRATION.md` | method, acceptance criteria, current matrix, per-model runs |
+| `docs/METRICS.md` | the metric set, the unified score, and what it does not mean |
+| `docs/LLM-BASELINE.md` | the first agent run, token-clock analysis, metered cost |
+| `docs/DECISIONS.md` | why things are the way they are |
+| `docs/STATUS.md` | what's done, what's next |
+| `docs/DESIGN-original-ru.md` | full design document (Russian) |
 
-## Tests
+Code comments and all expert-facing artifacts are in Russian by design — the validating
+audience is a Russian ammonia-plant operator.
 
-```bash
-pip install -e .[dev]
-pytest
-```
-
-The agent tests use a fake API client — no key or network needed; they pin
-the request shape (model id, forced strict tool choice, cache breakpoints)
-and the fallback behaviour.
-
-## Layout
-
-```
-nh3bench/
-  properties.py   NH3 saturation properties (table + optional CoolProp)
-  plant.py        lumped-parameter plant ODEs + hard pressure interlocks
-  scenarios.py    demand profiles: deliveries, doors, faults, weather
-  safety.py       command-clamping safety layer between agent and actuators
-  baseline.py     thermostat + staged-compressor reference controller
-  scoring.py      episode cost and report
-  runner.py       episode loop, observation builder, JSONL logging
-  agents/haiku.py Claude Haiku 4.5 operator
-tests/
-```
+> The previous NH3Bench (a single-suction telemetry-control benchmark with a Haiku
+> reference agent) is preserved in this repository's git history prior to this tree.
