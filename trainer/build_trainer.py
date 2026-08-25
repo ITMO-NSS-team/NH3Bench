@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """Сборка тренажёра эксперта в один HTML. Физика — та же, через Pyodide."""
-import base64, json, os, sys
+import base64, json, os, sys, tempfile
 
-ROOT = "/home/claude"
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 sys.path.insert(0, os.path.join(ROOT, "trainer"))
 import driver as DRV
@@ -34,6 +34,8 @@ REF = {
            ["Регламент", "КАТ-3, УЩ-2"], ["Эталон", "чисто"]],
     "S5": [["Бездействие", "чисто"], ["Случайный", "УЩ-3"],
            ["Регламент", "УЩ-3"], ["Эталон", "чисто"]],
+    "S6": [["Бездействие", "КАТ-2"], ["Случайный", "КАТ-1, УЩ-2"],
+           ["Регламент", "КАТ-1, УЩ-2"], ["Эталон", "чисто"]],
 }
 
 WORKER_JS = r"""
@@ -827,9 +829,10 @@ html = (HTML.replace("@@CSS@@", CSS)
         .replace("@@WORKER@@", worker)
         .replace("@@MAIN@@", main))
 
-path = "/mnt/user-data/outputs/NH3Ops-тренажёр-эксперта.html"
+path = os.path.join(ROOT, "trainer", "NH3Ops-тренажёр-эксперта.html")
 open(path, "w", encoding="utf-8").write(html)
-open("/tmp/worker_check.js", "w").write(worker.replace(
-    "importScripts", "//importScripts", 1))
-open("/tmp/main_check.js", "w").write(main)
+tmp = tempfile.gettempdir()
+open(os.path.join(tmp, "worker_check.js"), "w", encoding="utf-8").write(
+    worker.replace("importScripts", "//importScripts", 1))
+open(os.path.join(tmp, "main_check.js"), "w", encoding="utf-8").write(main)
 print("записан:", path, round(len(html) / 1024), "КБ")

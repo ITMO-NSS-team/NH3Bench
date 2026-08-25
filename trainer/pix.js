@@ -605,7 +605,14 @@ const PIX = (function(){
 
   function drawHaze(z,ppm){
     const zz=ZONES[z];
-    const n=Math.min(Math.round(ppm/140*260),320);
+    // пелена по всей зоне при аварийном уровне (>=70 ppm по стационарному)
+    if(ppm>=70){
+      const va=Math.min(0.06+ppm/1400,0.16);
+      dither(zz.x+2,zz.y+2,zz.w-4,zz.h-4,
+        "rgba(134,223,143,"+va.toFixed(2)+")",
+        "rgba(134,223,143,"+(va*0.55).toFixed(2)+")");
+    }
+    const n=Math.min(Math.round(ppm/60*260),360);
     for(let i=0;i<n;i++){
       const bx=rnd(i*29)* (zz.w-6);
       const drift=((fc*0.4+i*11)%(zz.h-6));
@@ -614,6 +621,8 @@ const PIX = (function(){
       const a=0.25+0.3*rnd(i*7+(fc>>2));
       px(xx,yy,"rgba(134,223,143,"+a.toFixed(2)+")");
       if(rnd(i*13)>0.7) px(xx+1,yy,"rgba(134,223,143,"+(a*0.6).toFixed(2)+")");
+      if(ppm>=70&&rnd(i*17)>0.55)
+        px(xx,yy+1,"rgba(134,223,143,"+(a*0.5).toFixed(2)+")");
     }
   }
 
@@ -795,6 +804,17 @@ const PIX = (function(){
       cx.font='700 '+(S>=3?13:11)+'px "IBM Plex Sans Condensed",sans-serif';
       if(Math.floor(fc/10)%2)
         cx.fillText("ОБЩИЙ АВАРИЙНЫЙ СТОП",(W/2-34)*S,4.4*S);
+    } else if((obs.alarms||[]).length){
+      // активная сигнализация (без общего стопа): мигающий транспарант
+      if(Math.floor(fc/12)%2){
+        cx.font='700 '+(S>=3?12:10)+'px "IBM Plex Sans Condensed",sans-serif';
+        const t="ТРЕВОГА ×"+obs.alarms.length;
+        const w2=cx.measureText(t).width;
+        cx.fillStyle="rgba(18,20,23,.72)";
+        cx.fillRect((W/2)*S-w2/2-4,1.2*S,w2+8,3.6*S);
+        cx.fillStyle=C.warn;
+        cx.fillText(t,(W/2)*S-w2/2,4.0*S);
+      }
     }
   }
 
