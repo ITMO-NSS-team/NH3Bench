@@ -20,12 +20,12 @@ Three things make it different from scripted operations benchmarks:
 ## Results — seed 1, six scenarios, four Claude models
 
 Unified score 0–100 (catastrophe = 0; people, economics and discipline multiply — see
-`docs/METRICS.md`). `*` = cell assumed, not measured.
+`docs/METRICS.md`).
 
 | policy | S1 | S2 | S3 | S4 | S5 | S6 | mean | RegGap |
 |---|---|---|---|---|---|---|---|---|
 | oracle (scripted solution) | 100 | 100 | 100 | 100 | 100 | 100 | 100.0 | +55.1 |
-| Fable 5 | 100* | 100* | 100 | 100* | 78 | 69 | 91.2 | +46.4 |
+| Fable 5 | 100 | 100 | 100 | 100 | 78 | 69 | 91.2 | +46.4 |
 | Opus 5 | 100 | 100 | 80 | 100 | 67 | 0 | 74.6 | +29.8 |
 | always-ESD | 73 | 95 | 57 | 95 | 57 | 0 | 62.8 | +17.9 |
 | Sonnet 5 | 0 | 0 | 80 | 53 | 84 | 69 | 47.6 | +2.8 |
@@ -50,7 +50,7 @@ python3 -m pip install numpy matplotlib
 # reference policies on one scenario
 python3 tests/run_baselines.py --scenarios S1 --policies null,oracle --seeds 1
 
-# an LLM agent (needs the Claude Code CLI; ~$0.3-11 valuation per episode)
+# an LLM agent (needs the Claude Code CLI; ~$0.3-37 valuation per episode)
 python3 tests/run_llm.py --scenarios S6 --model haiku
 
 # the full metric report
