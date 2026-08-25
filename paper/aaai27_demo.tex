@@ -1,6 +1,6 @@
 % AAAI-27 Demonstration Track submission.
-% Requires the official AAAI-27 author kit (aaai27.sty + aaai27.bst); place the
-% kit files next to this file and compile:
+% Requires the official AAAI-27 author kit (aaai2027.sty + aaai2027.bst);
+% place the kit files next to this file and compile:
 %   pdflatex aaai27_demo && bibtex aaai27_demo && pdflatex aaai27_demo && pdflatex aaai27_demo
 % Track limits: two pages of content plus up to one page of references,
 % AAAI two-column style. Single-blind (permitted by the call).
@@ -8,23 +8,19 @@
 % Digital Twin", "Bidirectional Human-AI Learning in Real-Time Disoriented
 % Balancing"): Figure 1 with a long caption carrying the video link,
 % plain section names, numbered demo phases, and a short Conclusion.
-\documentclass[letterpaper]{article}
-\usepackage{aaai27}
-\usepackage{times}
-\usepackage{helvet}
-\usepackage{courier}
-\usepackage[hyphens]{url}
-\usepackage{graphicx}
-\urlstyle{rm}
-\def\UrlFont{\rm}
-\usepackage{natbib}
-\usepackage{caption}
+\documentclass[letterpaper]{article} % DO NOT CHANGE THIS
+\usepackage{aaai2027}  % DO NOT CHANGE THIS
+% Fonts (newtxtext, helvet, courier) are loaded by aaai2027.sty itself.
+\usepackage[hyphens]{url}  % DO NOT CHANGE THIS
+\usepackage{graphicx} % DO NOT CHANGE THIS
+\urlstyle{rm} % DO NOT CHANGE THIS
+\def\UrlFont{\rm}  % DO NOT CHANGE THIS
+\usepackage{natbib}  % DO NOT CHANGE THIS AND DO NOT ADD ANY OPTIONS TO IT
+\usepackage{caption} % DO NOT CHANGE THIS AND DO NOT ADD ANY OPTIONS TO IT
 \usepackage{booktabs}
 \usepackage{tikz}
 \usetikzlibrary{positioning,arrows.meta}
-\frenchspacing
-\setlength{\pdfpagewidth}{8.5in}
-\setlength{\pdfpageheight}{11in}
+\frenchspacing  % DO NOT CHANGE THIS
 
 \pdfinfo{
 /TemplateVersion (2027.1)
@@ -100,6 +96,7 @@ against a 186 bar pipe limit).
 
 \begin{figure}[t]
 \centering
+\resizebox{\columnwidth}{!}{%
 \begin{tikzpicture}[
   font=\scriptsize,
   box/.style={draw, rounded corners=1pt, align=center, inner sep=3pt},
@@ -122,7 +119,8 @@ against a 186 bar pipe limit).
 \draw[arr] (wf) -| node[lbl, pos=0.25, above] {ground truth, delayed} (twin);
 \draw[arr] (llm) -- (clock);
 \draw[arr] (clock) -| ([yshift=-2pt]twin.south);
-\end{tikzpicture}
+\end{tikzpicture}%
+}
 \caption{The NH3Bench loop. The agent sees rendered instrument readings, not
 plant state, and answers with one action id from a fixed 133-action catalog:
 remote commands, safety systems, or work orders that dispatch one of two
@@ -176,6 +174,7 @@ too slowly.''
 \begin{table}[t]
 \centering
 \small
+\setlength{\tabcolsep}{4pt}
 \begin{tabular}{@{}lrrrrrrr@{}}
 \toprule
 policy & S1 & S2 & S3 & S4 & S5 & S6 & mean\\
