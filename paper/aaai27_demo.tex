@@ -30,7 +30,7 @@
 /TemplateVersion (2027.1)
 }
 
-\title{NH3Bench: Language-Model Shift Engineers\\ on an Ammonia-Plant Digital Twin}
+\title{NH3Bench: Language Agents as Real-Time\\ Operators of an Industrial Plant}
 \author{
     Nikolay Nikitin
 }
@@ -44,43 +44,59 @@
 \maketitle
 
 \begin{abstract}
-We demonstrate NH3Bench, a benchmark in which a language model acts as the
-shift engineer of an industrial ammonia (R717) refrigeration plant simulated
-by a physics-based digital twin. The benchmark is accident-forcing (inaction
-ends in catastrophe), runs in pseudo-real time (reasoning tokens convert to
-virtual seconds, so a correct answer can arrive after the rupture), and is
-partially digitalized (part of the truth exists only on local gauges, fetched
-by dispatching simulated workers). Across six calibrated scenarios, four
-Claude-family models score between 32 and 91 of 100. Attendees watch live
-episodes with the models' reasoning streams and play the same scenarios
-themselves, under the same clock, in a browser-based trainer running the same
-twin.
+We demonstrate NH3Bench, an executable benchmark for a general question: can
+a language-model agent hold real-time supervisory control of an industrial
+installation? Three properties define the task and are absent from
+digital-native agent benchmarks: the process evolves whether or not the
+agent acts (inaction ends in catastrophe); it does not pause for
+deliberation (reasoning tokens convert to virtual seconds, so a correct
+answer can arrive after the rupture); and it is only partially digitalized
+(part of the truth exists only on local gauges, fetched by dispatching
+simulated workers). NH3Bench instantiates the task on a physics-based
+digital twin of an industrial ammonia (R717) refrigeration plant, with the
+agent as shift engineer. Across six calibrated scenarios, four Claude-family
+models score between 32 and 91 of 100. Attendees watch live episodes with
+the models' reasoning streams and play the same scenarios themselves, under
+the same clock, in a browser trainer running the same twin.
 \end{abstract}
 
 \section{Introduction}
 
 Language-model agents are being proposed for operational roles in physical
-industries, yet existing agent benchmarks evaluate them on digital-native
-tasks: tool use in software environments \citep{liu2023agentbench},
+industries. Beneath the specific proposals lies a general question: can an
+agent hold \emph{real-time supervisory control} of a running industrial
+installation---keep a continuous physical process inside its safe envelope
+using the plant's instruments, a fixed set of actuators and safety systems,
+and its human workforce, on the plant's own clock?
+
+Existing agent benchmarks evaluate digital-native surrogates of this task:
+tool use in software environments \citep{liu2023agentbench},
 customer-service dialogues under rule compliance \citep{yao2024tau}, or
 procedure following where the correct procedure is supplied in the prompt
 \citep{sopbench2025}. Industrial-asset suites stop short of a closed control
 loop \citep{assetops2025}, and real-time operator studies use abstract text
-simulators without physics \citep{nrtbench2026}. Industrial reality differs
-in three ways these settings do not capture: in a developing incident
-\emph{doing nothing is itself a decision} with physical consequences; the
-plant does not pause while the agent deliberates; and no SCADA system sees
-everything---a shift engineer's information set includes sight glasses, local
-gauges, smells and sounds, fetched by people at a cost in minutes and,
-sometimes, in exposure.
+simulators without physics \citep{nrtbench2026}. What separates the general
+task from all of these is not the vocabulary of valves and compressors but
+three structural properties. The dynamics are autonomous: in a developing
+incident \emph{doing nothing is itself a decision} with physical
+consequences, so there is no safe default from which to grade only errors of
+commission. Deliberation is not free: the plant integrates forward while the
+agent thinks, so correctness and latency cannot be scored separately. And no
+SCADA system sees everything---the true information set includes sight
+glasses, local gauges, smells and sounds, extended only by dispatching
+people at a cost in minutes and, sometimes, in exposure. A benchmark for the
+task must operationalize all three; to our knowledge none did.
 
-NH3Bench operationalizes all three in a domain with a documented accident
-record: the 2010 Millard Refrigerated Services ammonia release was caused by
-a defrost cycle interrupted by a power loss \citep{csb2010}---the mechanism
-reconstructed in our first scenario. Every outcome is produced by a
-thermodynamic model whose mass balance closes to under 0.1\,\% and which
-reproduces a Millard-class hydraulic shock (201 bar against a 186 bar pipe
-limit).
+NH3Bench is an executable instantiation of the task. Its three properties
+only bite when consequences are produced by physics rather than by script,
+so instantiation requires a concrete plant; we chose industrial ammonia
+(R717) refrigeration for its documented accident record and its rich split
+between digital and analog truth. The 2010 Millard Refrigerated Services
+ammonia release was caused by a defrost cycle interrupted by a power loss
+\citep{csb2010}---the mechanism reconstructed in our first scenario. Every
+outcome is produced by a thermodynamic model whose mass balance closes to
+under 0.1\,\% and which reproduces a Millard-class hydraulic shock (201 bar
+against a 186 bar pipe limit).
 
 \begin{figure}[t]
 \centering
@@ -120,11 +136,14 @@ available at the repository URL above.}
 
 \section{Benchmark Design}
 
-The twin models a 250 t/day dairy plant: four screw compressors on two
-suction stages, two evaporative condensers, three vessels, six air coolers,
-hot-gas defrost, an ice-water circuit, HACCP-critical product temperatures,
-and a dispersion model with per-operator dose accounting.
-Figure~\ref{fig:loop} shows the decision loop.
+The task interface is domain-independent: the agent sees rendered
+instrument readings, answers with one action id from a fixed catalog, and
+shares its clock with the plant (Figure~\ref{fig:loop}). The instantiation
+fills this interface with physics: the twin models a 250 t/day dairy plant
+with four screw compressors on two suction stages, two evaporative
+condensers, three vessels, six air coolers, hot-gas defrost, an ice-water
+circuit, HACCP-critical product temperatures, and a dispersion model with
+per-operator dose accounting.
 
 Six scenarios are admitted by a calibration quartet plus an always-ESD
 baseline: inaction must end in catastrophe; a scripted oracle must pass
@@ -142,14 +161,15 @@ found empirically: an ``emergency-stop everywhere'' meta-policy scores
 88.6/100 on S1--S5 with no diagnosis at all, but ends in catastrophe on S6,
 where the leak is independent of the compressors.
 
-Alongside Prevention Rate the benchmark reports \emph{Regulation Gap}: score
-minus that of the published checklist policy---an agent that cannot beat the
-written regulation scores below zero regardless of raw prevention. A unified
-0--100 score multiplies independent axes: catastrophe or an incapacitated
-worker zeroes the run; operator dose multiplies (never monetized); economics
-and discipline fill the remainder. Points of no return, found by bisection
-over delayed-oracle starts, separate ``did not understand'' from
-``understood too slowly.''
+The metrics attach to the task, not the domain. Alongside Prevention Rate
+the benchmark reports \emph{Regulation Gap}: score minus that of the
+published checklist policy---an agent that cannot beat the written
+regulation scores below zero regardless of raw prevention. A unified 0--100
+score multiplies independent axes: catastrophe or an incapacitated worker
+zeroes the run; operator dose multiplies (never monetized); economics and
+discipline fill the remainder. Points of no return, found by bisection over
+delayed-oracle starts, separate ``did not understand'' from ``understood
+too slowly.''
 
 \section{Measured Results}
 
@@ -221,14 +241,18 @@ humans and models play the same partially observed game.
 
 \section{Conclusion}
 
-NH3Bench measures a capability triad that software-native benchmarks do not:
-acting under irreversible physical consequences, budgeting one's own
-deliberation, and buying information with human exposure. Its
-accident-forcing design makes ``do nothing'' a measured failure rather than
-a safe default; its mirrored controls defeat fixed dispositions; and at
-minutes and cents per episode it is cheap enough to re-run at every model
-release. All code, scenarios, reference policies, metric definitions and
-complete transcripts are public at the repository above.
+NH3Bench turns a general question---can a language agent hold real-time
+supervisory control of an industrial installation?---into a measurable one.
+The capability triad it isolates belongs to the task, not to ammonia: acting
+under irreversible physical consequences, budgeting one's own deliberation,
+and buying information with human exposure. The recipe---a calibrated
+physics twin, a token clock, a workforce layer, accident-forcing scenario
+admission with mirrored controls---transfers to any installation with a
+faithful twin; ammonia refrigeration is one point in that space, chosen for
+its accident record. At minutes and cents per episode the benchmark is cheap
+enough to re-run at every model release. All code, scenarios, reference
+policies, metric definitions and complete transcripts are public at the
+repository above.
 
 \bibliography{aaai27_demo}
 
