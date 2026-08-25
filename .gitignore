@@ -1,4 +1,4 @@
-__pycache__/
+﻿__pycache__/
 *.pyc
 .venv/
 viz/expert_data.json
@@ -21,5 +21,6 @@ paper/*.bbl
 paper/*.blg
 paper/*.log
 paper/*.pdf
+!paper/aaai27_demo.pdf
 paper/aaai2027.sty
 paper/aaai2027.bst
