@@ -87,6 +87,12 @@ but arrived after t_PONR. Runs where no key action was ever taken are excluded a
 under `key_found` instead: failing to understand and failing to act in time are different
 failures with different remedies, and merging them destroys the metric's purpose.
 
+> Terminology note: this metric is *consequence-based* — it measures actions that arrived
+> after the physical point of no return — and is distinct from the token- and
+> accuracy-based "overthinking" of the reasoning-efficiency literature (e.g. OckBench's
+> "Overthinking Tax", arXiv:2511.05722; OptimalThinkingBench, arXiv:2508.13141). Where
+> collision is a concern, the unambiguous synonym is **Post-PONR Correct-Action Rate**.
+
 **tokens per decision** — median and p95, first-class numbers. Verbosity buys virtual
 seconds at 1 token ≈ 1/40 s, so this is a safety variable, not a style one.
 
