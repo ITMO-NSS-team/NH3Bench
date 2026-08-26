@@ -84,6 +84,21 @@ plants:
   cross-check against the validated NH₃ defrost model of Hoffenbecker, Klein
   & Reindl (HVAC&R Research 11(3), 2005).
 
+### Executed wave-speed check (2026-08-26) — finding
+
+`piping.wave_speed` uses K = 1.03 ГПа. CoolProp identifies this as the
+*isothermal* bulk modulus of liquid NH₃ near −10 °C (K_T = 1.02 ГПа) — but a
+compression wave is adiabatic: K_s = ρa² = 1.6…2.2 ГПа over −40…0 °C. With
+the Korteweg pipe-elasticity correction the twin's ρ·a — and hence the
+Joukowsky spike — is systematically low by ×1.16…1.37, worst exactly in the
+CIHS regime (−40 °C). Corrected peaks (≈170…490 бар vs current 130…360 бар)
+stay inside the CSB-cited field envelope of 100…700 бар. **Do not fix K in
+isolation**: the strength derate 0.45 was co-calibrated with the current
+spike magnitudes, so K and derate must be re-tuned together and the scenario
+calibration re-run; the V6 derate sweep (×0.75 ≈ the same shift in the
+failure margin) already probes whether outcome signs survive a change of
+this size.
+
 ## V4 — Transient phenomena vs published experiments ⬜ (highest physics value)
 
 - **CIHS / hydraulic shock** — the twin's decisive mechanism and its most
@@ -163,6 +178,27 @@ scenario × policy × world) + summary table. Full run is ~K × 4 policies ×
 6 scenarios × 40 s ≈ hours — run in the background like the baselines matrix.
 
 ---
+
+## Data inventory — what actually exists to validate the physics against
+
+Ordered by directness for this twin. "Access" states how the numbers are
+obtained in practice.
+
+| # | Source | Validates | Access |
+|---|---|---|---|
+| A1 | NIST-grade EOS via CoolProp (Tillner-Roth & Baehr) | property tables, superheat model, isentropic work, liquid sound speed / bulk modulus for Joukowsky | scripted (`tests/validate_props.py`) — already produced two findings (ρ superheat corner; isothermal-vs-adiabatic K) |
+| B1 | ASHRAE RP-970 (Martin): lab CIHS experiments in NH₃ | shock model — measured peak pressure vs conditions | report purchasable from ASHRAE; data as figures → digitize |
+| B2 | Narayanan et al. 2020 CFD (validated vs RP-970) | shock envelope (v → Δp) | paper figures → digitize |
+| B3 | Steam-water CIWH datasets: NUREG/CR-5220, PMK-2 / EU WAHALoads benchmark | shape of the condensation-collapse → Joukowsky chain (fluid-agnostic mechanism check) | public reports |
+| C1 | Desert Tortoise 1983 (LLNL): 4 pressurized NH₃ releases, 10–41 т, arcs at 100–800 м | outdoor dispersion / fenceline (CAT-1) | data report public; also in Modeler's Data Archive and SMEDIS/REDIPHEM |
+| C2 | FLADIS 1993–94 (Risø): 0.25–0.55 кг/с NH₃ | outdoor dispersion, smaller scale | REDIPHEM/SMEDIS |
+| C3 | Jack Rabbit III (ongoing): large-scale NH₃ releases, ADMLC model intercomparison | dense-gas near field — bounds упрощение №1 | data being released to participants; intercomparison protocol public |
+| D1 | Aljuwayhel, Reindl, Klein, Nellis, IJR 2008: field measurements of an industrial NH₃ air cooler under frosting | `UA_dry`, `frost_UA_k`, `frost_rate_k` | paper figures → digitize |
+| D2 | Hoffenbecker, Klein, Reindl, HVAC&R Research 11(3) 2005: NH₃ hot-gas defrost model + data | defrost transient, useful-heat fraction | paper |
+| D3 | IRC (UW–Madison Industrial Refrigeration Consortium) technotes: head-pressure control, condenser performance, cold-store energy benchmarks | system steady state, kWh-per-tonne plausibility | public technotes |
+| D4 | Manufacturer data: Bitzer/Sabroe/GEA/Mayekawa selection software; BAC/EVAPCO condenser tables; AHRI ratings | compressor η_v/η_is polynomials, condenser approach | free software exports / published tables |
+| E1 | CSB Millard 2010 report; EPA RMP incident database; OSHA PSM records | event-level: release size → consequences, timelines | public |
+| F1 | Validating expert's plant SCADA (anonymized) | plant-level dynamics (V5 protocol) | by request — the only "real plant trend" source; public SCADA data from NH₃ plants effectively does not exist |
 
 ## Reporting
 

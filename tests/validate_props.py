@@ -104,7 +104,32 @@ def main():
         print(f"  {P1/1e5:5.2f} → {P2/1e5:5.2f} бар: {100 * e:6.2f}")
     report["isentropic"] = is_rows
 
-    # -- 4. Обратная согласованность Psat(Tsat(P)) -----------------------
+    # -- 4. Скорость волны для гидроудара: K из уравнения состояния ------
+    # piping.wave_speed берёт K = 1.03 ГПа. По CoolProp изотермический
+    # модуль K_T(−10 °C) = 1.02 ГПа — то есть в модели взят изотермический
+    # модуль. Но волна сжатия — процесс адиабатический: K_s = rho*a², где
+    # a — скорость звука. Разница даёт систематическое занижение rho*a
+    # (а с ним и пика Жуковского) примерно на треть.
+    from nh3twin.piping import wave_speed
+    print("\nСкорость волны (D=150 мм, стенка 5.5 мм), м/с:")
+    print(f"{'T,°C':>6}{'a_NIST':>9}{'K_s,ГПа':>9}{'a_твин':>9}"
+          f"{'a_NIST+Кортевег':>17}{'занижение':>11}")
+    ws_rows = []
+    for TC in (-40, -30, -20, -10, 0):
+        T = 273.15 + TC
+        rho = CP.PropsSI("D", "T", T, "Q", 0, FLUID)
+        a = CP.PropsSI("A", "T", T, "Q", 0, FLUID)
+        K_s = rho * a * a
+        a_tw = wave_speed(0.150, 0.0055, rho)
+        a_ref = wave_speed(0.150, 0.0055, rho, K=K_s)
+        ws_rows.append({"T_C": TC, "a_nist": float(a), "K_s_GPa": K_s / 1e9,
+                        "a_twin": float(a_tw), "a_ref_korteweg": float(a_ref),
+                        "underestimate": float(a_ref / a_tw)})
+        print(f"{TC:6d}{a:9.0f}{K_s/1e9:9.2f}{a_tw:9.0f}{a_ref:17.0f}"
+              f"{a_ref/a_tw:10.2f}×")
+    report["wave_speed"] = ws_rows
+
+    # -- 5. Обратная согласованность Psat(Tsat(P)) -----------------------
     e_inv = rel(np.array([pr.Psat(float(pr.Tsat(p))) for p in P[::20]]), P[::20])
     report["inverse_roundtrip"] = {"max_pct": float(100 * e_inv.max())}
     print(f"\nPsat(Tsat(P)) кругорейс: max {100 * e_inv.max():.4f} %")
