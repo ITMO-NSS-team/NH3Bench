@@ -26,10 +26,16 @@ from dataclasses import dataclass, field
 from . import props as pr
 
 
-# Скорость волны в стальной трубе с жидким аммиаком.
-# a = sqrt(K/rho) / sqrt(1 + (K*D)/(E*e)), K ~ 1.03 ГПа, E = 2.1e11 Па.
+# Скорость волны в стальной трубе с жидким аммиаком (формула Кортевега):
+# a = sqrt(K/rho) / sqrt(1 + (K*D)/(E*e)), E = 2.1e11 Па.
+# K -- АДИАБАТИЧЕСКИЙ модуль упругости K_s = rho*a_звука², берётся из
+# уравнения состояния через props.K_liq(P): 1.6...2.2 ГПа в рабочем
+# диапазоне. Прежняя константа 1.03 ГПа была изотермическим модулем
+# (совпадает с K_T при -10 C) и занижала rho*a на 16...37 % -- найдено
+# валидацией против CoolProp (docs/VALIDATION.md, V1). K теперь передаётся
+# явно, чтобы изотермическое значение не вернулось по умолчанию.
 def wave_speed(D: float, wall: float, rho: float,
-               K: float = 1.03e9, E: float = 2.1e11) -> float:
+               K: float, E: float = 2.1e11) -> float:
     return (K / rho) ** 0.5 / (1.0 + (K * D) / (E * wall)) ** 0.5
 
 
@@ -46,7 +52,7 @@ class PipeSegment:
     wall: float
     sigma_y: float = 235e6
     burst_factor: float = 2.4      # sigma_burst / sigma_y для 09Г2С
-    dynamic_derate: float = 0.45   # понижение прочности при ударном нагружении
+    dynamic_derate: float = 0.55   # понижение прочности при ударном нагружении
     wall_loss: float = 0.0         # доля утонения от коррозии (задаётся отказом)
     fatigue: float = 0.0           # накопленное повреждение, 1.0 = разрушение
     cycles: int = 0                # число зарегистрированных циклов нагружения
@@ -70,10 +76,13 @@ class PipeSegment:
         Давление разрушения при ударном нагружении.
 
         Понижающий коэффициент учитывает концентрацию напряжений на опорах и
-        сварных швах и динамическое усиление отклика. Значение 0.45 подобрано
-        так, чтобы модель воспроизводила известные случаи разрушения
-        трубопроводов холодильных установок от конденсационного удара, и
-        подлежит экспертной приёмке (см. раздел валидации).
+        сварных швах и динамическое усиление отклика; физически осмысленная
+        полоса 0.3...0.7. Значение 0.55 перекалибровано совместно с переходом
+        на адиабатический K_s в wave_speed (пики выросли в ~1.3 раза):
+        известные случаи разрушения по-прежнему воспроизводятся с запасом,
+        а штатные переходные оттайки не копят усталость. Прежние 0.45 были
+        откалиброваны под заниженные изотермическим модулем пики. Параметр
+        подлежит экспертной приёмке (docs/VALIDATION.md).
         """
         return self.P_burst * self.dynamic_derate
 
@@ -82,9 +91,10 @@ class PipeSegment:
         return 3.141592653589793 * self.D ** 2 / 4.0
 
 
-def joukowsky_spike(seg: PipeSegment, rho_liq: float, dv: float) -> float:
+def joukowsky_spike(seg: PipeSegment, rho_liq: float, dv: float,
+                    K: float) -> float:
     """Скачок давления по Жуковскому при изменении скорости жидкости на dv."""
-    a = wave_speed(seg.D, seg.wall_eff, rho_liq)
+    a = wave_speed(seg.D, seg.wall_eff, rho_liq, K)
     return rho_liq * a * abs(dv)
 
 
@@ -133,6 +143,9 @@ def condensation_shock(seg: PipeSegment,
         return null
 
     rho = pr.rho_l(P_feed)
+    # Адиабатический модуль упругости жидкости при температуре подачи --
+    # столб разгоняется именно холодной жидкостью со стороны питания.
+    K = pr.K_liq(P_feed)
     dP_drive = P_coil - P_feed
     v = (2.0 * dP_drive / rho) ** 0.5
 
@@ -147,9 +160,9 @@ def condensation_shock(seg: PipeSegment,
             pass
         elif s is header:
             v_s = v * slug_factor * (seg.area / s.area)
-        dP_j = joukowsky_spike(s, rho, v_s)
+        dP_j = joukowsky_spike(s, rho, v_s, K)
         P_peak = P_coil + dP_j
-        a = wave_speed(s.D, s.wall_eff, rho)
+        a = wave_speed(s.D, s.wall_eff, rho, K)
         dPdt = dP_j / max(s.L / a, 1e-4)
         s.P_peak = max(s.P_peak, P_peak)
         s.dPdt_peak = max(s.dPdt_peak, dPdt)

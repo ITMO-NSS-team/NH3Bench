@@ -62,13 +62,39 @@ def _build_table() -> dict:
         cpv_sh.append((h2 - h1) / 30.0)
     cols["cp_v_sh"] = np.array(cpv_sh)
 
+    # Скорость звука в насыщенной жидкости: даёт АДИАБАТИЧЕСКИЙ модуль
+    # упругости K_s = rho*a^2 для расчёта гидроудара. Валидация V1 показала,
+    # что прежняя константа 1.03 ГПа была изотермическим модулем (K_T при
+    # -10 C) и занижала произведение rho*a на 16...37 %.
+    cols["a_l"] = np.array(
+        [CP.PropsSI("A", "P", float(p), "Q", 0, FLUID) for p in P])
+
+    # Показатель степени плотности перегретого пара: rho = rho_v*(Tsat/T)^n.
+    # n = 1 -- идеальный газ; реальный пар при конденсационных давлениях
+    # сжимаемее (Z растёт с перегревом), n ~ 1.2...1.5. Подгонка по точке
+    # с перегревом 40 К убирает погрешность до 9 % в углу горячего пара,
+    # найденную валидацией V1.
+    n_sh = []
+    for p in P:
+        Ts = CP.PropsSI("T", "P", float(p), "Q", 1, FLUID)
+        rv = CP.PropsSI("D", "P", float(p), "Q", 1, FLUID)
+        T2 = Ts + 40.0
+        rho2 = CP.PropsSI("D", "P", float(p), "T", T2, FLUID)
+        n_sh.append(float(np.log(rv / rho2) / np.log(T2 / Ts)))
+    cols["n_rho_sh"] = np.array(n_sh)
+
     return cols
 
 
 def _load() -> dict:
     if os.path.exists(_CACHE):
         with np.load(_CACHE) as z:
-            return {k: z[k] for k in z.files}
+            tab = {k: z[k] for k in z.files}
+        # Таблица прежней версии без новых колонок перестраивается
+        # (требует CoolProp; свежий npz закоммичен, так что у пользователей
+        # эта ветка не срабатывает).
+        if "a_l" in tab and "n_rho_sh" in tab:
+            return tab
     tab = _build_table()
     np.savez_compressed(_CACHE, **tab)
     return tab
@@ -123,6 +149,18 @@ def s_v(P):    return _interp("s_v", P)
 def h_fg(P):   return _interp("h_fg", P)
 def cp_l(P):   return _interp("cp_l", P)
 def cp_v(P):   return _interp("cp_v_sh", P)
+def a_l(P):    return _interp("a_l", P)
+
+
+def K_liq(P):
+    """Адиабатический модуль упругости насыщенной жидкости K_s = rho*a².
+
+    Именно он определяет скорость волны сжатия при гидроударе. Изотермический
+    модуль (1.0...1.4 ГПа) здесь неприменим: волна -- быстрый адиабатический
+    процесс; ошибка была найдена валидацией против CoolProp (docs/VALIDATION.md).
+    """
+    a = _interp("a_l", P)
+    return _interp("rho_l", P) * a * a
 
 
 def Psat(T):
@@ -148,9 +186,12 @@ def s_vap(P, T):
 
 
 def rho_vap(P, T):
-    """Плотность перегретого пара: приближение идеального газа с поправкой
-    на плотность насыщения при том же давлении."""
-    return rho_v(P) * Tsat(P) / np.maximum(T, 1.0)
+    """Плотность перегретого пара: rho_v(P) * (Tsat/T)^n(P).
+
+    Показатель n затабулирован по CoolProp (n = 1 -- идеальный газ; реальный
+    пар при конденсационных давлениях даёт n до ~1.5). Прежняя модель с n = 1
+    завышала плотность до 9 % при 12 бар и перегреве 80 К."""
+    return rho_v(P) * (Tsat(P) / np.maximum(T, 1.0)) ** _interp("n_rho_sh", P)
 
 
 def h_isentropic(P1, T1, P2):
@@ -234,8 +275,9 @@ def vessel_pressure(M: float, U: float, V: float,
 
 # --- Прочее --------------------------------------------------------------
 
-SOUND_SPEED_LIQUID_PIPE = 1150.0   # м/с, волновая скорость в стальной трубе
-                                   # с жидким аммиаком (Wylie & Streeter)
+# Историческая константа волновой скорости (1150 м/с) удалена: она была
+# получена из изотермического модуля упругости. Актуальная скорость волны
+# считается через K_liq(P) и поправку Кортевега в piping.wave_speed.
 M_MOL = 0.017031                   # кг/моль
 R_SPEC = 8.314462 / M_MOL          # Дж/(кг*К)
 

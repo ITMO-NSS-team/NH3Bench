@@ -26,6 +26,18 @@ is controlled by the bypass line restriction, added as `EvapState.equalize_facto
 also gave a physically honest defect to build a scenario on: a fouled equalization bypass,
 a real commissioning/maintenance fault.
 
+**The wave-speed bulk modulus must be adiabatic, and it travels with the derate.**
+Validation against CoolProp (2026-08-26) showed the original K = 1.03 ГПа was the
+*isothermal* bulk modulus of liquid NH₃ (K_T at −10 °C); a compression wave is adiabatic,
+K_s = ρa² = 1.6…2.2 ГПа, so ρ·a — and the Joukowsky spike — was low by ×1.16…1.37.
+Fixed by tabulating the saturated-liquid sound speed (`props.a_l`, `props.K_liq`) and
+passing K explicitly through `piping.wave_speed` (no default, so the isothermal constant
+cannot silently return). Because the strength derate 0.45 had been calibrated *against
+the understated spikes*, it was re-anchored to 0.55 in the same change: known failure
+cases still reproduce (S1: CAT-3 at the same 614 s), normal defrost transients still do
+not accumulate fatigue, and the value stays inside the physically defensible 0.3…0.7
+band. Do not change either constant alone — they are a calibrated pair.
+
 **Fatigue must accumulate per event.** Originally low-cycle fatigue integrated per
 timestep, making time-to-rupture a function of `dt`. Now each transient counts as one
 loading cycle with a 10 s debounce. Calibrated so a healthy pipe (186 bar limit) survives

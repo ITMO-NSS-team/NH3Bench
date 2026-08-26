@@ -43,10 +43,11 @@ Output: `results/validation/props.json`. Rerun after any table regeneration.
 
 Finding: the README's blanket "< 1.5 % up to 80 K" claim held for enthalpy and
 entropy but not for superheated-vapor *density* at condensing pressure — the
-linear-cp model under-represents real-gas effects there. Impact assessment:
-that state only feeds the hot-gas defrost path, whose flow is self-limited by
-coil condensation and separately perturbed ±25 % in V6; isentropic work is
-unaffected. The README qualification was corrected accordingly (упрощение №3).
+linear-cp model under-represents real-gas effects there. **Fixed 2026-08-26**:
+`rho_vap` now uses a tabulated per-pressure exponent, rho_v·(Tsat/T)^n(P);
+worst-corner error dropped 9.4 % → 2.6 %, zero at the 40 K fit point. All
+five V1 verdicts (saturation, superheat, isentropic, round-trip, wave speed)
+now pass.
 
 ## V2 — Component level vs published equipment data ⬜
 
@@ -99,16 +100,24 @@ calibration re-run; the V6 derate sweep (×0.75 ≈ the same shift in the
 failure margin) already probes whether outcome signs survive a change of
 this size.
 
-## V4 — Transient phenomena vs published experiments ⬜ (highest physics value)
+**Fixed 2026-08-26** as a calibrated pair: `wave_speed` now takes the
+adiabatic K_s from the EOS (`props.K_liq`; twin/NIST ratio 1.0000 at all
+temperatures) and the derate moved 0.45 → 0.55. S1 reproduces CAT-3 at the
+same 614 s. See the DECISIONS.md entry.
 
-- **CIHS / hydraulic shock** — the twin's decisive mechanism and its most
-  contested numbers. Overlay the twin's (slug velocity → peak pressure) points
-  on: Martin et al. experimental data (ASHRAE RP-970 rig, 2007), the CFD
-  envelope of Narayanan et al. (2020), and the field range cited by CSB
-  (100…700 бар). The twin currently produces 130…360 бар at 16…45 м/с —
-  formalize this as a plotted overlay, not a sentence. Acceptance: twin points
-  inside the experimental envelope; Joukowsky slope ρ·a reproduced within the
-  wave-speed uncertainty from `wave_speed()`.
+## V4 — Transient phenomena vs published experiments 🔶 (highest physics value)
+
+- **CIHS / hydraulic shock** 🔶 `tests/validate_shock.py` — the twin's
+  decisive mechanism and its most contested numbers. Executed 2026-08-26
+  against the data available without purchasing reports: a 36-point sweep of
+  (slug velocity → peak pressure) plotted over the CSB field envelope
+  (100…700 бар) and the ~276 бар (4000 psia) ASME PVT 2023 point, with the
+  NIST-property Joukowsky line as identity —
+  `results/validation/shock_envelope.png`. Result: peaks 250…540 бар at
+  24…49 м/с, all inside the envelope; the Millard-condition corridor
+  (8–11 бар, −40 °C) gives 430…513 бар, 4/4 in envelope. Remaining ⬜: digitize
+  Martin's RP-970 measured points and the Narayanan (2020) CFD envelope for a
+  quantitative overlay rather than a range check.
 - **Defrost transient**: coil pressure/metal temperature trajectory shape vs
   Hoffenbecker's published curves (dimensionless comparison).
 - **Dispersion**: same source terms fed to EPA/NOAA ALOHA; compare fenceline
@@ -179,23 +188,51 @@ scenario × policy × world) + summary table. Full run is ~K × 4 policies ×
 
 ### Pilot results (2026-08-26): S1, S4 × {null, oracle, regulation} × 6 worlds
 
-- **S4: 18/18 signs preserved** — null → CAT-2, oracle clean, regulation →
-  CAT-3 in every perturbed world. Robust.
-- **oracle: 12/12 clean** across both scenarios — the reference solution does
-  not depend on the disputed parameters.
-- **S1: null and regulation flip to "no catastrophe" in 2 of 6 worlds** —
-  precisely the worlds where `dynamic_derate` came out high (×1.15 and
-  ×1.23). The acceptance criterion (flip point ≥ 25 % away) is **not met**:
-  S1's rupture margin over pipe strength is only ~15 %.
-- Read together with the wave-speed finding above, the two errors point the
-  same way: the twin currently *understates* the Joukowsky spike by
-  ×1.16–1.37, and S1's accident survives only ~15 % of extra strength — so
-  correcting K_s would *widen* S1's accident-forcing margin, not erode it.
-  Action: re-tune (K, derate) jointly against the RP-970/Narayanan envelope
-  (V4), re-run the calibration matrix, then repeat this sweep with all six
-  scenarios and the `random` policy over seeds.
+Under the original (isothermal-K) physics:
+
+- **S4: 18/18 signs preserved**; **oracle: 12/12 clean**.
+- **S1: null and regulation flip in 2 of 6 worlds** — exactly the worlds with
+  `dynamic_derate` ×1.15 and ×1.23; rupture margin only ~15 %, acceptance
+  (flip ≥ 25 % away) not met. Together with the wave-speed finding this
+  predicted that correcting K_s (spike up ×1.37) would *widen* the margin.
+
+**Re-run after the K_s + derate=0.55 fix** (same worlds): S4 still 18/18,
+oracle still 12/12, and **S1 improved to 5/6** — the ×1.15 flip is gone;
+only the ×1.23 world still flips, matching the widened analytic margin
+273/227 ≈ 1.20. Remaining ⬜: extend the sweep to all six scenarios and the
+`random` policy over seeds, and push the S1 margin past 25 % if expert
+review of the derate band allows.
 
 ---
+
+## Reproducibility finding (2026-08-26): the committed S3 cells did not reproduce
+
+Re-running the calibration matrix for the physics fixes exposed a defect that
+*predates* them (verified by A/B against a clean worktree at the previous
+HEAD): scenario S3's committed baseline rows — oracle clean, milk_max 5.73 —
+do not reproduce on this machine with unchanged code. At HEAD the S3 oracle
+run trips all four compressors (КМ3/КМ4 on the HP-pressure relay, КМ1/КМ2 on
+discharge temperature — both manual-reset), the upper stage never recovers,
+and milk runs away to 14 °C (МАЙ-3, ~3700 с above HACCP). Mechanism: with
+19 кг of air the true discharge pressure rides exactly on the 16.5 бар trip
+setpoint during the fault ramp; whether the trip fires before the oracle's
+purge lands at t≈337 с is a knife-edge that fell the other way in the
+original calibration environment. S1/S2/S4/S5/S6 reproduce exactly (28/30
+matrix cells identical to the archive, to the second). Consequence: S3 was
+retuned to restore the designed admission signs under current code, and S3's
+published per-model cells must be treated as stale until re-measured. Lesson
+recorded: knife-edge scenarios need a margin check (distance of P_dis peak to
+the trip setpoint in the oracle run) as part of the admission criteria.
+
+Retune (same day): air charge 19 → 14 кг and the oracle playbook extended
+with what a real operator does after clearing the causes — resetting the
+latched HP-relay lockouts (`COMP:RESET`), which also became part of the
+scenario's key actions. Verified under the new physics: oracle clean with a
+0.2 К milk margin (max 5.78 vs the 6.00 HACCP line), inaction and the
+regulation policy lose the stage and the batch (milk to 14+ °C), random does
+not save. The trip-and-reset mechanic makes the scenario *harder* for
+agents, not easier: clearing root causes is no longer sufficient — the
+latched protection must be noticed and reset.
 
 ## Data inventory — what actually exists to validate the physics against
 

@@ -24,14 +24,20 @@ Unified score 0–100 (catastrophe = 0; people, economics and discipline multipl
 
 | policy | S1 | S2 | S3 | S4 | S5 | S6 | mean | RegGap |
 |---|---|---|---|---|---|---|---|---|
-| oracle (scripted solution) | 100 | 100 | 100 | 100 | 100 | 100 | 100.0 | +55.1 |
-| Fable 5 | 100 | 100 | 100 | 100 | 78 | 69 | 91.2 | +46.4 |
-| Opus 5 | 100 | 100 | 80 | 100 | 67 | 0 | 74.6 | +29.8 |
-| always-ESD | 73 | 95 | 57 | 95 | 57 | 0 | 62.8 | +17.9 |
-| Sonnet 5 | 0 | 0 | 80 | 53 | 84 | 69 | 47.6 | +2.8 |
-| written regulation | 0 | 95 | 80 | 0 | 94 | 0 | 44.9 | — |
-| Haiku 4.5 | 0 | 0 | 100 | 0 | 94 | 0 | 32.4 | −12.5 |
-| inaction | 0 | 0 | 80 | 0 | 100 | 0 | 30.1 | −14.8 |
+| oracle (scripted solution) | 100 | 100 | 100 | 100 | 100 | 100 | 100.0 | +59.0 |
+| Fable 5 | 100 | 100 | 80\* | 100 | 78 | 69 | 87.9 | +46.9 |
+| Opus 5 | 100 | 100 | 80\* | 100 | 67 | 0 | 74.6 | +33.6 |
+| always-ESD | 73 | 95 | 57 | 95 | 57 | 0 | 62.8 | +21.8 |
+| Sonnet 5 | 0 | 0 | 80\* | 53 | 84 | 69 | 47.6 | +6.7 |
+| written regulation | 0 | 95 | 57 | 0 | 94 | 0 | 41.0 | — |
+| inaction | 0 | 0 | 80 | 0 | 100 | 0 | 30.1 | −10.9 |
+| Haiku 4.5 | 0 | 0 | 80\* | 0 | 94 | 0 | 29.1 | −11.9 |
+
+\* Twin v2.1 (adiabatic wave-speed modulus, corrected superheat density —
+`docs/VALIDATION.md`). 22 of 24 recorded model episodes replay bit-identically
+under v2.1; the S3 model cells are deterministic replays of the recorded
+decision traces under the retuned S3 (the scenario was fixed after a
+reproducibility finding) and await live re-measurement.
 
 **Regulation Gap** = score minus the published checklist-following policy: an agent that
 cannot beat the written regulation scores below zero here regardless of raw prevention.

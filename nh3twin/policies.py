@@ -312,10 +312,21 @@ class OraclePolicy(Policy):
         # S3: снять допуск и вернуть орошение, продуть воздух, добить
         # вентиляторами, при нехватке -- разгрузить морозильник, сохранив
         # ледяную воду. Аварийный останов запрещён.
-        "S3": ["PERMIT:CLEAR:CD-02", "COND:FANS_MAX:CD-01",
-               "COND:FANS_MAX:CD-02", "MANUAL:PURGE_NCG",
-               "COND:PUMP_ON:CD-02", "FEED:CLOSE:EV-05", "FEED:CLOSE:EV-06",
-               "MEASURE:CONDENSER_CHECK:CD-01", "NO_OP"],
+        "S3": (["PERMIT:CLEAR:CD-02", "COND:FANS_MAX:CD-01",
+                "COND:FANS_MAX:CD-02", "MANUAL:PURGE_NCG",
+                "COND:PUMP_ON:CD-02", "FEED:CLOSE:EV-05", "FEED:CLOSE:EV-06",
+                "MEASURE:CONDENSER_CHECK:CD-01"] +
+               # Пока давление шло вверх, реле ВД успело запереть верхнюю
+               # ступень (ручной возврат). После устранения причин оператор
+               # обязан снять блокировки, и чем раньше, тем меньше долг
+               # ледяной воды; повторная волна сбросов страхует попытку,
+               # сделанную до спада давления.
+               ["NO_OP"] * 6 +
+               ["COMP:RESET:CO-03", "COMP:RESET:CO-04",
+                "COMP:RESET:CO-03", "COMP:RESET:CO-04"] +
+               ["NO_OP"] * 8 +
+               ["COMP:RESET:CO-03", "COMP:RESET:CO-04",
+                "COMP:RESET:CO-01", "COMP:RESET:CO-02", "NO_OP"]),
         # S4: несимметричная локализация -- вентиляция, вывод человека,
         # остановить насосы (сбить дебит), отсечь сосуд, НО путь через
         # испаритель оставить открытым. Никакого ESD.

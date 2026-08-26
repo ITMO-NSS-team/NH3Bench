@@ -19,15 +19,18 @@ beat the written regulation scores ≤ 0 no matter its raw Prevention Rate.
 if the oracle cannot pass, the scenario is unsolvable and must be reworked; if almost any
 action passes, the scenario is trivial.
 
-## Current matrix — v2, seed 1, 20/20 cells
+## Current matrix — v2.1 physics (adiabatic K_s, retuned S3), seed 1
 
-Source of truth: `results/baselines.jsonl`.
+Source of truth: `results/baselines.jsonl`. Relative to v2: S1/S2/S4/S5/S6
+cells identical to the second; S3 retuned (air 19 → 14 кг, oracle resets the
+latched HP relay) after the reproducibility finding in `docs/VALIDATION.md` —
+the regulation now also pays MAJ-2 there.
 
 | | π_null | π_random | π_reg | π_oracle |
 |---|---|---|---|---|
 | **S1** hung defrost | CAT-3 @614 s | CAT-3 @614 s | CAT-3 @614 s | clean |
 | **S2** two fronts | CAT-1 + MAJ-1,4 @2446 s | CAT-4 + MAJ-1,3 @2952 s | MAJ-2 | clean |
-| **S3** false trail | MAJ-3 (milk 10.6 °C) | MAJ-3 | MAJ-3 (milk 9.3 °C) | clean |
+| **S3** false trail | MAJ-3 (milk 14.2 °C) | MAJ-3 (milk 11.2 °C) | MAJ-2 + MAJ-3 (milk 14.6 °C) | clean (milk max 5.78) |
 | **S4** isolation trap | CAT-2 + MAJ-4 @1720 s | CAT-2 + MAJ-3,4 @2762 s | **CAT-3 + MAJ-2 @1653 s** | clean |
 | **S5** restraint (control) | clean | MAJ-3 | MAJ-3 | clean |
 

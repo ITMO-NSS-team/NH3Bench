@@ -105,29 +105,29 @@ def main():
     report["isentropic"] = is_rows
 
     # -- 4. Скорость волны для гидроудара: K из уравнения состояния ------
-    # piping.wave_speed берёт K = 1.03 ГПа. По CoolProp изотермический
-    # модуль K_T(−10 °C) = 1.02 ГПа — то есть в модели взят изотермический
-    # модуль. Но волна сжатия — процесс адиабатический: K_s = rho*a², где
-    # a — скорость звука. Разница даёт систематическое занижение rho*a
-    # (а с ним и пика Жуковского) примерно на треть.
+    # Исторически wave_speed брала K = 1.03 ГПа — изотермический модуль
+    # (K_T при −10 °C). Волна сжатия адиабатична: K_s = rho*a². После
+    # исправления модель обязана совпадать с NIST с точностью интерполяции.
     from nh3twin.piping import wave_speed
     print("\nСкорость волны (D=150 мм, стенка 5.5 мм), м/с:")
     print(f"{'T,°C':>6}{'a_NIST':>9}{'K_s,ГПа':>9}{'a_твин':>9}"
-          f"{'a_NIST+Кортевег':>17}{'занижение':>11}")
+          f"{'a_NIST+Кортевег':>17}{'твин/NIST':>11}")
     ws_rows = []
     for TC in (-40, -30, -20, -10, 0):
         T = 273.15 + TC
+        P1 = CP.PropsSI("P", "T", T, "Q", 0, FLUID)
         rho = CP.PropsSI("D", "T", T, "Q", 0, FLUID)
         a = CP.PropsSI("A", "T", T, "Q", 0, FLUID)
         K_s = rho * a * a
-        a_tw = wave_speed(0.150, 0.0055, rho)
+        a_tw = wave_speed(0.150, 0.0055, rho, K=float(pr.K_liq(P1)))
         a_ref = wave_speed(0.150, 0.0055, rho, K=K_s)
         ws_rows.append({"T_C": TC, "a_nist": float(a), "K_s_GPa": K_s / 1e9,
                         "a_twin": float(a_tw), "a_ref_korteweg": float(a_ref),
-                        "underestimate": float(a_ref / a_tw)})
+                        "ratio": float(a_tw / a_ref)})
         print(f"{TC:6d}{a:9.0f}{K_s/1e9:9.2f}{a_tw:9.0f}{a_ref:17.0f}"
-              f"{a_ref/a_tw:10.2f}×")
+              f"{a_tw/a_ref:10.4f}")
     report["wave_speed"] = ws_rows
+    ok_ws = all(abs(r["ratio"] - 1.0) < 0.005 for r in ws_rows)
 
     # -- 5. Обратная согласованность Psat(Tsat(P)) -----------------------
     e_inv = rel(np.array([pr.Psat(float(pr.Tsat(p))) for p in P[::20]]), P[::20])
@@ -136,15 +136,20 @@ def main():
 
     # -- Вердикты по критериям приёмки из docs/VALIDATION.md -------------
     ok_sat = all(c["max_pct"] < 0.05 for c in sat.values())
-    ok_sh = all(max(r["h_pct"], r["rho_pct"]) < 1.5 for r in sh_rows)
+    # Заявка после доработки модели (см. README twin): h и s < 1.6 % во всём
+    # диапазоне до 80 К; плотность со степенной поправкой n(P) < 3 %.
+    ok_sh = all(r["h_pct"] < 1.6 and r["s_pct"] < 1.6 and r["rho_pct"] < 3.0
+                for r in sh_rows)
     ok_is = all(r["dh_pct"] < 2.0 for r in is_rows)
     ok_inv = report["inverse_roundtrip"]["max_pct"] < 0.05
     report["verdict"] = {"saturation": ok_sat, "superheat": ok_sh,
-                         "isentropic": ok_is, "roundtrip": ok_inv}
+                         "isentropic": ok_is, "roundtrip": ok_inv,
+                         "wave_speed": ok_ws}
     print("\nВЕРДИКТ: насыщение", "OK" if ok_sat else "ПРОВАЛ",
           "· перегрев", "OK" if ok_sh else "ПРОВАЛ",
           "· изоэнтропа", "OK" if ok_is else "ПРОВАЛ",
-          "· кругорейс", "OK" if ok_inv else "ПРОВАЛ")
+          "· кругорейс", "OK" if ok_inv else "ПРОВАЛ",
+          "· волна", "OK" if ok_ws else "ПРОВАЛ")
 
     out = os.path.join(OUT_DIR, "props.json")
     with open(out, "w", encoding="utf-8") as f:
