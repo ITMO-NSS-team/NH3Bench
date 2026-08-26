@@ -42,6 +42,9 @@ rankings invert — fixed dispositions lose one of the two mirrors.
 Full per-run analysis: `docs/CALIBRATION.md`, `docs/LLM-BASELINE.md`. Per-decision
 transcripts with the models' own reasoning: `results/llm_traces/`.
 
+The AAAI-27 demonstration-track paper: built PDF in `paper/aaai27_demo.pdf`,
+LaTeX source at [nicl-nno/nh3bench-paper](https://github.com/nicl-nno/nh3bench-paper).
+
 ## Quick start
 
 ```bash
