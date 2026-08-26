@@ -74,6 +74,8 @@ python3 tests/report_metrics.py
 | `docs/ARCHITECTURE.md` | module map, state vector, key APIs |
 | `docs/SCENARIOS.md` | scenario mechanisms, traps, solutions |
 | `docs/CALIBRATION.md` | method, acceptance criteria, current matrix, per-model runs |
+| `docs/VALIDATION.md` | twin validation plan, data inventory, findings |
+| `docs/VALIDATION-REPORT-ru.md` | physics-model validation report (Russian): data, findings, fixes, results |
 | `docs/METRICS.md` | the metric set, the unified score, and what it does not mean |
 | `docs/LLM-BASELINE.md` | the first agent run, token-clock analysis, metered cost |
 | `docs/DECISIONS.md` | why things are the way they are |
