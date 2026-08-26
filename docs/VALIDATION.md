@@ -234,6 +234,32 @@ not save. The trip-and-reset mechanic makes the scenario *harder* for
 agents, not easier: clearing root causes is no longer sufficient — the
 latched protection must be noticed and reset.
 
+## Open defect (found 2026-08-26): level/pressure sensor faults never reach the panel
+
+`Plant.tags()` publishes `LEVEL_VE_*` and `P_*` straight from the state vector
+(`plant.py:1136-1144`), bypassing `indicated_level()` / `indicated_pressure()`.
+Those two helpers *are* used by the level controller (`plant.py:798`), the
+pump-cycling logic and the alarm system (`control.py:171,487`) — so a stuck
+level sensor blinds the **controller** while the **agent's panel shows the
+truth**. Only NH₃ readings are detector-aware (`ppm_indicated`).
+
+Scope: exactly one scenario is affected — S2, whose stuck `LEVEL_VE-LP`
+(frozen at 36 % from t+900 s) is the "silent front". Verified on the S2/π_null
+run: the panel level does not freeze, it rises 45.5 → 100 % as the blinded
+controller overfills the drum. S5/S6 use `NH3_*` faults and are unaffected.
+
+Consequence: S2's designed trap ("the reading looks plausible and stable
+precisely because the sensor is dead") is not the trap agents actually face;
+they face a visibly climbing level while a loud leak competes for attention.
+The scenario still discriminates (Opus/Fable prevent, Sonnet/Haiku do not) —
+but for a different reason than documented, and the manual level-glass
+measurement is currently redundant with the panel.
+
+**Not fixed here on purpose**: routing the tags through the indicated-*
+helpers would make S2 materially harder, invalidating its calibration and all
+four measured model cells. Fixing it requires recalibrating S2 and re-running
+the model episodes on it.
+
 ## Data inventory — what actually exists to validate the physics against
 
 Ordered by directness for this twin. "Access" states how the numbers are

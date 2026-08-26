@@ -48,6 +48,13 @@ rankings invert — fixed dispositions lose one of the two mirrors.
 Full per-run analysis: `docs/CALIBRATION.md`, `docs/LLM-BASELINE.md`. Per-decision
 transcripts with the models' own reasoning: `results/llm_traces/`.
 
+![S2 in the trainer: leak, blinded level control, catastrophe](docs/media/nh3ops-s2.gif)
+
+*Scenario S2 played out with no intervention in the browser trainer (the same twin
+agents run against): a flange leak fills the machine room while the level controller
+overfills the low-pressure drum, ending in CAT-1. Regenerate with
+`node trainer/record_gif.js` (Playwright) + `python viz/make_gif.py`.*
+
 The AAAI-27 demonstration-track paper: built PDF in `paper/aaai27_demo.pdf`,
 LaTeX source at [nicl-nno/nh3bench-paper](https://github.com/nicl-nno/nh3bench-paper).
 
