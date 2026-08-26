@@ -267,9 +267,27 @@ suction gauge when it lies; the condensing thermometer stays independent
 Verified after the fix: the S2 panel freezes at 36 % while the true level
 climbs to 87 % (π_null); the S2 quartet is unchanged (null CAT-1+MAJ-1,4;
 random CAT-4; regulation clean+MAJ-2; oracle clean), so the scenario's
-admission still holds. All four model cells for S2 were re-measured live —
-replaying the recorded traces would be invalid, since those decisions were
-taken against the old observation stream.
+admission still holds; S2's PONR is unchanged (1687.5 / 1237.5 s — the
+scripted oracle does not read the panel); and all 23 non-S2 recorded episodes
+replay bit-identically.
+
+All four model cells for S2 were re-measured live — replaying the recorded
+traces would be invalid, since those decisions were taken against the old
+observation stream. Result on the fixed scenario:
+
+| model | before (panel told the truth) | after (gauge really freezes) |
+|---|---|---|
+| Fable 5 | clean, 132 steps | clean, 131 steps → 100 |
+| Opus 5 | clean, 127 steps | clean, 157 steps → 100 |
+| Sonnet 5 | CAT-1 + MAJ-1,4, 111 steps | CAT-1 + MAJ-1, 89 steps → 0 |
+| Haiku 4.5 | CAT-1 + MAJ-1, 21 steps | clean + MAJ-2, 36 steps → 95 |
+
+The frontier models were unaffected by making the scenario harder — they were
+already dispatching for the manual reading. Haiku improved: on the harder
+version it reached for an emergency stop it never justified, which happens to
+also stop the overfill. That is the honest reading of a blunt-instrument
+success, and it moves Haiku's Regulation Gap from −11.9 to +3.9. Cost of the
+re-measurement: \$46.8 at list prices for four episodes.
 
 ## Data inventory — what actually exists to validate the physics against
 

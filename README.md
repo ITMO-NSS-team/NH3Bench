@@ -29,15 +29,21 @@ Unified score 0–100 (catastrophe = 0; people, economics and discipline multipl
 | Opus 5 | 100 | 100 | 80\* | 100 | 67 | 0 | 74.6 | +33.6 |
 | always-ESD | 73 | 95 | 57 | 95 | 57 | 0 | 62.8 | +21.8 |
 | Sonnet 5 | 0 | 0 | 80\* | 53 | 84 | 69 | 47.6 | +6.7 |
+| Haiku 4.5 | 0 | 95 | 80\* | 0 | 94 | 0 | 44.9 | +3.9 |
 | written regulation | 0 | 95 | 57 | 0 | 94 | 0 | 41.0 | — |
 | inaction | 0 | 0 | 80 | 0 | 100 | 0 | 30.1 | −10.9 |
-| Haiku 4.5 | 0 | 0 | 80\* | 0 | 94 | 0 | 29.1 | −11.9 |
 
-\* Twin v2.1 (adiabatic wave-speed modulus, corrected superheat density —
-`docs/VALIDATION.md`). 22 of 24 recorded model episodes replay bit-identically
-under v2.1; the S3 model cells are deterministic replays of the recorded
-decision traces under the retuned S3 (the scenario was fixed after a
-reproducibility finding) and await live re-measurement.
+\* Twin v2.1 (adiabatic wave-speed modulus, corrected superheat density,
+sensor faults reaching the panel — `docs/VALIDATION.md`). S2 was re-measured
+live on all four models after the sensor fix; the S3 cells are deterministic
+replays of the recorded traces under the retuned S3 and await live
+re-measurement.
+
+On the fixed S2 — where the level gauge really does freeze and only a
+dispatched operator can tell — Opus and Fable still pass clean, Sonnet still
+ruptures, and Haiku prevents the catastrophe with a blunt emergency stop it
+never justified (95, since an unjustified ESD is charged as damage). That
+single cell is what lifts Haiku above the written regulation.
 
 **Regulation Gap** = score minus the published checklist-following policy: an agent that
 cannot beat the written regulation scores below zero here regardless of raw prevention.
