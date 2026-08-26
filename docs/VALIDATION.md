@@ -177,6 +177,24 @@ Output: `results/validation/robustness.jsonl` (resumable, one row per
 scenario × policy × world) + summary table. Full run is ~K × 4 policies ×
 6 scenarios × 40 s ≈ hours — run in the background like the baselines matrix.
 
+### Pilot results (2026-08-26): S1, S4 × {null, oracle, regulation} × 6 worlds
+
+- **S4: 18/18 signs preserved** — null → CAT-2, oracle clean, regulation →
+  CAT-3 in every perturbed world. Robust.
+- **oracle: 12/12 clean** across both scenarios — the reference solution does
+  not depend on the disputed parameters.
+- **S1: null and regulation flip to "no catastrophe" in 2 of 6 worlds** —
+  precisely the worlds where `dynamic_derate` came out high (×1.15 and
+  ×1.23). The acceptance criterion (flip point ≥ 25 % away) is **not met**:
+  S1's rupture margin over pipe strength is only ~15 %.
+- Read together with the wave-speed finding above, the two errors point the
+  same way: the twin currently *understates* the Joukowsky spike by
+  ×1.16–1.37, and S1's accident survives only ~15 % of extra strength — so
+  correcting K_s would *widen* S1's accident-forcing margin, not erode it.
+  Action: re-tune (K, derate) jointly against the RP-970/Narayanan envelope
+  (V4), re-run the calibration matrix, then repeat this sweep with all six
+  scenarios and the `random` policy over seeds.
+
 ---
 
 ## Data inventory — what actually exists to validate the physics against
