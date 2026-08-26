@@ -26,6 +26,17 @@ is controlled by the bypass line restriction, added as `EvapState.equalize_facto
 also gave a physically honest defect to build a scenario on: a fouled equalization bypass,
 a real commissioning/maintenance fault.
 
+**Indicated readings belong to the observation layer, not to `plant.tags()`.** S2's stuck
+level sensor blinded the level controller and the alarm system (both call
+`indicated_level`) but not the agent: `plant.tags()` published the true level straight
+from the state vector, so the panel showed the drum filling to 100 % while the scenario
+documentation promised a plausible frozen reading. The trap was inverted for months
+without anyone noticing, because the scenario still discriminated — for the wrong reason.
+Fixed by `episode.indicated_tags()`, applied where observations are built. The rule now:
+physics publishes truth, the observation layer publishes instruments. Anything that shows
+numbers to a human or an agent (including the trainer's history chart) goes through the
+observation layer.
+
 **The wave-speed bulk modulus must be adiabatic, and it travels with the derate.**
 Validation against CoolProp (2026-08-26) showed the original K = 1.03 ГПа was the
 *isothermal* bulk modulus of liquid NH₃ (K_T at −10 °C); a compression wave is adiabatic,

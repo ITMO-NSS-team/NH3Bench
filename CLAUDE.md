@@ -128,6 +128,11 @@ is recorded in `docs/DECISIONS.md`.
   scenario must warm the room so the thermostat calls for cooling.
 - **Manual measurements return ground truth**, bypassing failed sensors. That's the entire
   point of the workforce layer — never route them through the sensor model.
+- **The panel shows indicated readings, `plant.tags()` stays truth.** Sensor faults are
+  applied in `episode.indicated_tags()` (used by `build_observation` and the trainer's
+  history sampler), never inside `plant.tags()` — physical metrics and the episode trace
+  read the latter and must not inherit the lie. Publishing raw levels/pressures to the
+  agent silently disabled S2's whole second front once; see `docs/VALIDATION.md`.
 - **The action catalog is identical in every scenario.** No scenario-specific magic
   actions; the random policy has access to exactly what the LLM has.
 - **Scenarios are single deterministic instances (seed=1).** Randomization was

@@ -234,7 +234,7 @@ not save. The trip-and-reset mechanic makes the scenario *harder* for
 agents, not easier: clearing root causes is no longer sufficient — the
 latched protection must be noticed and reset.
 
-## Open defect (found 2026-08-26): level/pressure sensor faults never reach the panel
+## Fixed defect (found and fixed 2026-08-26): sensor faults never reached the panel
 
 `Plant.tags()` publishes `LEVEL_VE_*` and `P_*` straight from the state vector
 (`plant.py:1136-1144`), bypassing `indicated_level()` / `indicated_pressure()`.
@@ -255,10 +255,21 @@ The scenario still discriminates (Opus/Fable prevent, Sonnet/Haiku do not) —
 but for a different reason than documented, and the manual level-glass
 measurement is currently redundant with the panel.
 
-**Not fixed here on purpose**: routing the tags through the indicated-*
-helpers would make S2 materially harder, invalidating its calibration and all
-four measured model cells. Fixing it requires recalibrating S2 and re-running
-the model episodes on it.
+**Fix**: `episode.indicated_tags()` maps the raw plant tags to panel readings
+and is applied in `build_observation()`; `plant.tags()` deliberately stays
+ground truth so physical metrics and the episode trace remain honest. The
+trainer's history sampler (`driver._sample`) uses the same helper — a frozen
+gauge must give a flat curve for the human expert too, or they would be
+playing a different game than the models. Evaporating temperatures follow the
+suction gauge when it lies; the condensing thermometer stays independent
+(S3's trap depends on that gap).
+
+Verified after the fix: the S2 panel freezes at 36 % while the true level
+climbs to 87 % (π_null); the S2 quartet is unchanged (null CAT-1+MAJ-1,4;
+random CAT-4; regulation clean+MAJ-2; oracle clean), so the scenario's
+admission still holds. All four model cells for S2 were re-measured live —
+replaying the recorded traces would be invalid, since those decisions were
+taken against the old observation stream.
 
 ## Data inventory — what actually exists to validate the physics against
 

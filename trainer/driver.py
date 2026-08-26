@@ -10,8 +10,8 @@
 import json
 import nh3twin.scenarios as SC
 from nh3twin.scenarios import SCENARIOS
-from nh3twin.episode import (Episode, build_observation, POLL_PERIOD,
-                             VISIBLE_TAGS)
+from nh3twin.episode import (Episode, build_observation, indicated_tags,
+                             POLL_PERIOD, VISIBLE_TAGS)
 from nh3twin.actions import CATALOG, CATALOG_BY_ID
 
 PROGRESS = None      # callback(frac) для полосы прогрева; ставится снаружи
@@ -77,7 +77,10 @@ class Session:
         if (not force and self.samp_t
                 and t - self.samp_t[-1] < self.SAMPLE_S - 0.5):
             return
-        tg = p.tags()
+        # История строится по ПОКАЗАНИЯМ приборов: замерший датчик обязан
+        # давать плоскую кривую и в тренажёре, иначе эксперт видит то, чего
+        # не видит агент.
+        tg = indicated_tags(p, p.tags())
         self.samp_t.append(t)
         for k in self.hkeys:
             v = tg.get(k)

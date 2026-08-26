@@ -36,9 +36,15 @@ async function waitIdle(page) {
   const shoot = async (k = 3, gap = 110) => {
     // показания щита пишутся вместе с кадром: подписи к GIF должны
     // опираться на то, что реально было на приборах, а не на пересказ
-    const gauges = (await page.locator('#gauges').innerText().catch(() => ''))
-      .split('\n').map(s => s.trim()).filter(Boolean);
-    const pick = (name) => (gauges.find(g => g.startsWith(name)) || '').trim();
+    const gauges = await page.evaluate(() => {
+      const out = {};
+      document.querySelectorAll('#gauges .gr').forEach(r => {
+        const s = r.querySelector('span'), b = r.querySelector('b');
+        if (s && b) out[s.textContent.trim()] = b.textContent.trim();
+      });
+      return out;
+    }).catch(() => ({}));
+    const pick = (name) => gauges[name] || '';
     for (let i = 0; i < k; i++) {
       const clock = await page.locator('#clock').textContent();
       const file = path.join(OUTDIR, String(n).padStart(4, '0') + '.png');

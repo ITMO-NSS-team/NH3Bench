@@ -22,6 +22,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 import time
 
+from . import props as pr
 from .plant import Plant, MODE_NAMES
 from .control import PLC, AlarmSystem, SafetySystem
 from .faults import FaultManager
@@ -98,9 +99,51 @@ class Observation:
         return "\n".join(L)
 
 
+# Приборы щита, чьё показание может расходиться с фактом при отказе датчика.
+# Ключ -- тег наблюдения, значение -- (сосуд, вид прибора).
+_INSTRUMENTS = {
+    "LEVEL_VE_LP": ("VE-LP", "level"), "LEVEL_VE_IP": ("VE-IP", "level"),
+    "LEVEL_VE_HP": ("VE-HP", "level"),
+    "P_SUC_LP": ("VE-LP", "pressure"), "P_SUC_IP": ("VE-IP", "pressure"),
+    "P_COND": ("VE-HP", "pressure"),
+}
+# Температуры кипения на щите читаются по манометру всасывания, поэтому при
+# вранье манометра врут вместе с ним. Термометр конденсации (T_COND) --
+# отдельный прибор и остаётся истинным: на этом расхождении построен S3.
+_EVAP_T_FROM_P = {"T_EVAP_LP": "P_SUC_LP", "T_EVAP_IP": "P_SUC_IP"}
+
+
+def indicated_tags(p: Plant, tg: dict) -> dict:
+    """Показания приборов щита из истинных тегов установки.
+
+    Щит показывает ПОКАЗАНИЯ, а не состояние: при отказе датчика уровня или
+    давления расхождение с фактом видит только тот, кто пошлёт человека на
+    ручной замер. Без отказа indicated_* возвращает факт, поэтому в норме
+    операция тождественна. plant.tags() намеренно остаётся истиной -- на нём
+    считаются физические метрики и трасса эпизода.
+
+    Функция используется и стендом (build_observation), и тренажёром
+    (driver._sample): история показателей в тренажёре обязана врать так же,
+    как щит, иначе эксперт играет в другую игру, чем модели.
+    """
+    out = dict(tg)
+    for tag, (vessel, kind) in _INSTRUMENTS.items():
+        if tag not in out:
+            continue
+        if kind == "level":
+            out[tag] = p.indicated_level(vessel, out[tag] / 100.0) * 100.0
+        else:
+            out[tag] = p.indicated_pressure(vessel, out[tag] * 1e5) / 1e5
+    for t_tag, p_tag in _EVAP_T_FROM_P.items():
+        if t_tag in out and p.sensor_faults.get(
+                f"PRESSURE_{_INSTRUMENTS[p_tag][0]}"):
+            out[t_tag] = float(pr.Tsat(out[p_tag] * 1e5)) - 273.15
+    return out
+
+
 def build_observation(ep: "Episode") -> Observation:
     p = ep.plant
-    tg = p.tags()
+    tg = indicated_tags(p, p.tags())
     tags = {k: tg[k] for k in VISIBLE_TAGS if k in tg}
 
     eq = {}
