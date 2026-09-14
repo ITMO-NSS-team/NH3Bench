@@ -8,6 +8,8 @@
 """
 
 import json
+import os
+import pickle
 import nh3twin.scenarios as SC
 from nh3twin.scenarios import SCENARIOS
 from nh3twin.episode import (Episode, build_observation, indicated_tags,
@@ -38,6 +40,95 @@ def _base_with_progress(self, ep, operators):
 SC.Scenario._base = _base_with_progress
 
 
+SNAP_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "snap")
+SNAP_USED = None     # чем начат последний эпизод: 'снимок' | 'прогрев'
+
+# Файлы имитатора, от которых зависит траектория. Отпечаток их содержимого
+# кладётся в снимок и сверяется при загрузке.
+_DIGEST_FILES = ("props.py", "config.py", "plant.py", "piping.py",
+                 "dispersion.py", "control.py", "faults.py", "actions.py",
+                 "episode.py", "scenarios.py")
+
+
+# -------------------------------------------------------------------------
+# Переносимость снимка между версиями numpy
+#
+# Обычный pickle массива numpy 2.x ссылается на numpy._core.multiarray,
+# которого в numpy 1.x просто нет, -- а в браузере numpy свой, из сборки
+# Pyodide. Такой снимок не загрузился бы, и тренажёр молча возвращался к
+# полному прогреву (именно это и происходило). Поэтому numpy-объекты
+# сохраняются через нейтральные конструкторы: список чисел, строка типа и
+# состояние генератора. Восстанавливает их та версия numpy, которая есть.
+# -------------------------------------------------------------------------
+
+def _mk_array(values, dtype):
+    import numpy as np
+    return np.array(values, dtype=dtype)
+
+
+def _mk_rng(state):
+    """Генератор с точно тем же состоянием: шум приборов обязан совпасть."""
+    import numpy as np
+    bg = np.random.PCG64()
+    bg.state = state
+    return np.random.Generator(bg)
+
+
+def sources_digest() -> str:
+    """
+    Отпечаток физики.
+
+    Снимок состояния, снятый до правки коэффициентов, может загрузиться без
+    ошибки -- структура классов ведь не изменилась, -- и тренажёр незаметно
+    показывал бы прежнюю физику. Поэтому снимок годен только для той версии
+    исходников, на которой снят.
+    """
+    import hashlib
+    h = hashlib.sha256()
+    base = os.path.dirname(os.path.abspath(SC.__file__))
+    for name in _DIGEST_FILES:
+        p = os.path.join(base, name)
+        try:
+            with open(p, "rb") as fh:
+                h.update(name.encode())
+                h.update(fh.read())
+        except OSError:
+            return ""
+    return h.hexdigest()[:16]
+
+
+def make_episode(sid: str):
+    """
+    Эпизод на момент приёма смены.
+
+    Прогрев установки -- полтора-два часа модельного времени, то есть
+    7-14 тысяч шагов интегрирования; в браузере это десятки секунд, и
+    платить их заново при каждом перезапуске незачем. Снимок состояния даёт
+    ровно тот же объект (совпадение проверяется trainer/make_snapshots.py
+    --check), а если он не подошёл -- по несовпадению версий классов или
+    протокола, -- считаем прогрев, как раньше. Молчаливой подмены физики
+    здесь быть не может: либо восстановлено тождественное состояние, либо
+    оно посчитано заново.
+    """
+    global SNAP_USED
+    path = os.path.join(SNAP_DIR, sid + ".pkl")
+    if os.path.exists(path):
+        try:
+            with open(path, "rb") as fh:
+                snap = pickle.load(fh)
+            ep = snap["ep"]
+            if (snap.get("sid") == sid and ep.scen.sid == sid
+                    and snap.get("digest") == sources_digest()):
+                SNAP_USED = "снимок"
+                return ep
+            SNAP_USED = "прогрев (снимок от другой версии физики)"
+        except Exception:
+            SNAP_USED = "прогрев (снимок не прочитан)"
+    else:
+        SNAP_USED = "прогрев"
+    return Episode(SCENARIOS[sid], seed=1)
+
+
 def catalog_json() -> str:
     return json.dumps([{"aid": a.aid, "text": a.text, "lat": a.latency,
                         "cat": a.category} for a in CATALOG],
@@ -56,7 +147,7 @@ class Session:
     SAMPLE_S = 10.0                 # шаг записи истории, виртуальные секунды
 
     def __init__(self, sid: str):
-        self.ep = Episode(SCENARIOS[sid], seed=1)
+        self.ep = make_episode(sid)
         self.sid = sid
         self.records = []           # {t, aid, think, exec, result}
         self.think_total = 0.0

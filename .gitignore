@@ -24,3 +24,10 @@ paper/*.pdf
 !paper/aaai27_demo.pdf
 paper/aaai2027.sty
 paper/aaai2027.bst
+
+.env
+.env.*
+!.env.example
+
+trainer/snap/
+trainer/demo_manifest.json

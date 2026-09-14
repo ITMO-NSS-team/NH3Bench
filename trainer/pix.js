@@ -29,13 +29,13 @@ const PIX = (function(){
 
   // ---------- планировка ----------
   const ZONES={
-    ROOF:{x:8,y:6,w:192,h:40,f:C.roof,f2:C.roof2,lbl:"КРОВЛЯ"},
-    MACHINE_ROOM:{x:8,y:54,w:180,h:96,f:C.mr,f2:C.mr2,lbl:"МАШИННОЕ ОТДЕЛЕНИЕ"},
-    CONTROL_ROOM:{x:210,y:88,w:60,h:46,f:C.ctrl,f2:C.ctrl2,lbl:"ЩИТОВАЯ"},
-    HALL:{x:278,y:54,w:98,h:96,f:C.hall,f2:C.hall2,lbl:"ЦЕХ"},
-    LT_STORE:{x:210,y:172,w:78,h:40,f:C.lt,f2:C.lt2,lbl:"НТ-СКЛАД −20°"},
-    BLAST:{x:296,y:172,w:80,h:40,f:C.blast,f2:C.blast2,lbl:"МОРОЗИЛЬНАЯ −30°"},
-    ASSEMBLY_POINT:{x:8,y:176,w:66,h:34,f:C.asm,f2:C.asm2,lbl:"СБОРНЫЙ ПУНКТ"}
+    ROOF:{x:8,y:6,w:192,h:40,f:C.roof,f2:C.roof2,lbl:"КРОВЛЯ",lblEn:"ROOF"},
+    MACHINE_ROOM:{x:8,y:54,w:180,h:96,f:C.mr,f2:C.mr2,lbl:"МАШИННОЕ ОТДЕЛЕНИЕ",lblEn:"MACHINE ROOM"},
+    CONTROL_ROOM:{x:210,y:88,w:60,h:46,f:C.ctrl,f2:C.ctrl2,lbl:"ЩИТОВАЯ",lblEn:"CONTROL ROOM"},
+    HALL:{x:278,y:54,w:98,h:96,f:C.hall,f2:C.hall2,lbl:"ЦЕХ",lblEn:"PRODUCTION HALL"},
+    LT_STORE:{x:210,y:172,w:78,h:40,f:C.lt,f2:C.lt2,lbl:"НТ-СКЛАД −20°",lblEn:"LT STORE −20°"},
+    BLAST:{x:296,y:172,w:80,h:40,f:C.blast,f2:C.blast2,lbl:"МОРОЗИЛЬНАЯ −30°",lblEn:"BLAST FREEZER −30°"},
+    ASSEMBLY_POINT:{x:8,y:176,w:66,h:34,f:C.asm,f2:C.asm2,lbl:"СБОРНЫЙ ПУНКТ",lblEn:"ASSEMBLY POINT"}
   };
   const DOORS=[ [100,150,12,4],[186,150,8,4],[236,134,10,4],[236,150,10,8],
     [322,150,12,4],[244,168,10,4],[332,168,10,4],[38,172,10,4] ];
@@ -326,91 +326,99 @@ const PIX = (function(){
   }
 
   function infoHTML(sl){
-    if(!sl||!obs) return "Щёлкните по аппарату, помещению или обходчику.";
+    if(!sl||!obs) return L("clickHint");
     const T=obs.tags||{};
-    const nm=t=>(typeof TR==="function")?TR(t):t;
+    const nm=t=>(typeof TAG==="function")?TAG(t):t;
     const P=(v,mx)=>(typeof izb==="function"?
-      ((izb(v)<0?"вак. ":"")+Math.abs(izb(v)).toFixed(2)+" кгс/см²"):v);
+      ((izb(v)<0?(L("vac")+" "):"")+Math.abs(izb(v)).toFixed(2)+" "+
+       L("unitP")):v);
     if(sl.k==="comp"){
       const c=(obs.comps||[]).find(x=>x.tag===sl.id)||{};
       const role=(sl.id==="CO-01"||sl.id==="CO-02")?
-        "винтовой бустер нижней ступени":"винтовой компрессор верхней ступени";
-      return "<b>"+nm(sl.id)+"</b> — "+role+".<br>Состояние: "+nm(c.state||"—")+
-        " · золотник "+ (c.slide!=null?c.slide+" %":"—")+
-        " · t нагнетания "+(c.tdis!=null?c.tdis+" °С":"—")+
-        (c.trip?"<br><span style='color:var(--bad)'>Блокировка снимается командой после устранения причины.</span>":"");
+        L("roleBooster"):L("roleHighStage");
+      return "<b>"+nm(sl.id)+"</b> — "+role+".<br>"+L("stateWord")+": "+
+        STATE(c.state||"—")+
+        " · "+L("slideWord")+" "+(c.slide!=null?c.slide+" %":"—")+
+        " · "+L("tDischarge")+" "+(c.tdis!=null?c.tdis+" "+L("unitC"):"—")+
+        (c.trip?"<br><span style='color:var(--bad)'>"+L("tripNote")+
+                "</span>":"");
     }
     if(sl.k==="ves"){
-      const map={ "VE-HP":["РЛ","линейный ресивер",T.P_COND,"P_COND"],
-        "VE-IP":["ЦР-СД","циркуляционный ресивер-промсосуд, t₀ −10 °С",T.P_SUC_IP],
-        "VE-LP":["ЦР-НД","циркуляционный ресивер, t₀ −40 °С",T.P_SUC_LP]};
+      const map={ "VE-HP":[mapLbl("РЛ"),L("vesHP"),T.P_COND,"P_COND"],
+        "VE-IP":[TAG("VE-IP"),L("vesIP"),T.P_SUC_IP],
+        "VE-LP":[TAG("VE-LP"),L("vesLP"),T.P_SUC_LP]};
       const m=map[sl.id];
       const lv=T["LEVEL_"+sl.id.replace("-","_")];
-      return "<b>"+m[0]+"</b> — "+m[1]+".<br>Давление "+P(m[2])+
-        " · уровень по дистанционному датчику "+(lv!=null?lv.toFixed(0)+" %":"—")+
-        ".<br><span class='mut'>Указатель уровня на самом аппарате читается только нарядом.</span>";
+      return "<b>"+m[0]+"</b> — "+m[1]+".<br>"+L("pressureWord")+" "+P(m[2])+
+        " · "+L("levelRemote")+" "+(lv!=null?lv.toFixed(0)+" %":"—")+
+        ".<br><span class='mut'>"+L("glassOnlyByDispatch")+"</span>";
     }
     if(sl.k==="pump"){
       const p2=(obs.pumps||[]).find(x=>x.tag===sl.id)||{};
-      const loop=sl.id.indexOf("LP")>0?"контур НД (−40 °С)":"контур СД (−10 °С)";
-      return "<b>"+nm(sl.id)+"</b> — аммиачный насос, "+loop+
-        ". Состояние: "+ (p2.state||"—")+".";
+      const loop=sl.id.indexOf("LP")>0?L("loopLP"):L("loopIP");
+      return "<b>"+nm(sl.id)+"</b> — "+L("ammoniaPump")+", "+loop+
+        ". "+L("stateWord")+": "+STATE(p2.state||"—")+".";
     }
     if(sl.k==="cond"){
       const c=(obs.conds||[]).find(x=>x.tag===sl.id)||{};
-      return "<b>"+nm(sl.id)+"</b> — испарительный конденсатор.<br>Вентиляторов "+
-        (c.fans!=null?c.fans:"—")+"/2 · орошение "+(c.spray?"включено":"ВЫКЛЮЧЕНО")+
-        (c.loto?"<br><span style='color:var(--warn)'>Действует наряд-допуск: привод насоса обесточен и заперт; дистанционный пуск невозможен до закрытия допуска.</span>":"");
+      return "<b>"+nm(sl.id)+"</b> — "+L("evapCondenser")+".<br>"+
+        L("fansWord")+" "+(c.fans!=null?c.fans:"—")+"/2 · "+L("spray")+" "+
+        (c.spray?L("sprayOn"):L("sprayOff"))+
+        (c.loto?"<br><span style='color:var(--warn)'>"+L("lotoNote")+
+                "</span>":"");
     }
     if(sl.k==="evap"){
       const e=(obs.evaps||[]).find(x=>x.tag===sl.id)||{};
-      const place={ "EV-01":"испаритель ледяной воды (машзал)",
-        "EV-02":"воздухоохладитель камеры +2 °С","EV-03":"батарея НТ-склада",
-        "EV-04":"батарея НТ-склада","EV-05":"батарея морозильной",
-        "EV-06":"батарея морозильной"}[sl.id];
-      return "<b>"+nm(sl.id)+"</b> — "+place+".<br>Режим по контроллеру: "+
-        nm(e.mode||"—")+" · соленоид подачи "+(e.feed?"ОТКРЫТ":"закрыт")+
-        (e.P!=null?" · Р батареи "+P(e.P):"")+".";
+      const place=L("place."+sl.id);
+      return "<b>"+nm(sl.id)+"</b> — "+place+".<br>"+L("modeByController")+
+        ": "+TAG(e.mode||"—")+" · "+L("feedSolenoid")+" "+
+        (e.feed?L("openFull"):L("closedFull"))+
+        (e.P!=null?" · "+L("coilPressure")+" "+P(e.P):"")+".";
     }
-    if(sl.k==="milk") return "<b>Молочный танк</b>. t молока "+
-      (T.T_MILK!=null?T.T_MILK.toFixed(1):"—")+
-      " °С (граница по регламенту +6 °С). Охлаждается ледяной водой через пластинчатый охладитель.";
-    if(sl.k==="past") return "<b>Пастеризатор</b> — пластинчатый аппарат приёмки молока; секция охлаждения питается ледяной водой от ВО-1.";
-    if(sl.k==="ice") return "<b>Льдоаккумулятор</b> при ВО-1. Запас льда "+
-      (T.M_ICE_T!=null?T.M_ICE_T.toFixed(1):"—")+
-      " т из 34 т. Ночная наморозка покрывает утренний пик приёмки.";
+    if(sl.k==="milk") return "<b>"+L("milkTank")+"</b>. "+L("milkTemp")+" "+
+      (T.T_MILK!=null?T.T_MILK.toFixed(1):"—")+" "+L("unitC")+" "+
+      L("milkNote");
+    if(sl.k==="past") return "<b>"+L("pasteuriser")+"</b> — "+L("pastNote");
+    if(sl.k==="ice") return "<b>"+L("iceBank")+"</b> "+L("iceAt")+". "+
+      L("iceStock")+" "+(T.M_ICE_T!=null?T.M_ICE_T.toFixed(1):"—")+
+      " "+L("unitT")+" "+L("iceNote");
     if(sl.k==="zone"){
       const z=ZONES[sl.id];
-      let out="<b>"+z.lbl+"</b>.";
+      let out="<b>"+zoneLbl(z)+"</b>.";
       if(sl.id==="MACHINE_ROOM"||sl.id==="HALL"){
         const ppm=sl.id==="MACHINE_ROOM"?(T.NH3_MACHINEROOM_PPM||0):(T.NH3_HALL_PPM||0);
-        out+=" NH₃ по стационарному газоанализатору "+(ppm*0.71).toFixed(0)+
-          " мг/м³ ("+ppm.toFixed(0)+" ppm)."+
-          " Аварийная вытяжка "+(((obs.vents||{})[sl.id])?"работает":"выключена")+".";
+        out+=" "+L("nh3ByFixed")+" "+(ppm*0.71).toFixed(0)+
+          " "+L("unitMg")+" ("+ppm.toFixed(0)+" ppm)."+
+          " "+L("emergencyVent")+" "+
+          (((obs.vents||{})[sl.id])?L("ventRunning"):L("ventOff"))+".";
       }
       if(ZONE_T[sl.id]&&T[ZONE_T[sl.id]]!=null)
-        out+=" Температура "+T[ZONE_T[sl.id]].toFixed(1)+" °С.";
+        out+=" "+L("temperatureWord")+" "+T[ZONE_T[sl.id]].toFixed(1)+
+             " "+L("unitC")+".";
       const here=Object.entries(obs.ops||{}).filter(([k,v])=>v.zone===sl.id)
         .map(([k])=>nm(k));
-      out+=" Персонал: "+(here.length?here.join(", "):"нет")+".";
+      out+=" "+L("personnel")+": "+(here.length?here.join(", "):L("nobody"))+".";
       return out;
     }
     if(sl.k==="op"){
       const st=(obs.ops||{})[sl.id]||{};
       const tk=(obs.wf||[]).find(t=>t.op===sl.id);
       const now=obs.t+(typeof thinkSim==="function"?thinkSim():0);
-      let out="<b>"+nm(sl.id)+"</b> — машинист-обходчик. Зона: "+nm(st.zone||"—")+
-        ". Доза "+Math.round((st.dose||0)*0.71)+
-        " мг/м³·мин (нормативы: 370 — сверхнорматив, 1060 — поражение)."+
-        (st.ppe?" В изолирующем дыхательном аппарате.":"");
+      let out="<b>"+nm(sl.id)+"</b> — "+L("opRole")+". "+L("zoneWord")+": "+
+        nm(st.zone||"—")+
+        ". "+L("dose")+" "+Math.round((st.dose||0)*0.71)+
+        " "+L("unitDose")+" "+L("doseLimits")+"."+
+        (st.ppe?" "+L("inScba"):"");
       if(tk){
-        const what=ITEM_RU[tk.item]||tk.item;
+        const what=itemName(tk.item);
         out+= now<tk.ta ?
-          "<br>Идёт в "+nm(tk.zone)+": "+what+
+          "<br>"+L("walkingTo")+" "+nm(tk.zone)+": "+what+
             (tk.target?" ("+nm(tk.target)+")":"")+
-            ", прибытие через "+Math.max(0,tk.ta-now).toFixed(0)+" с.":
-          "<br>Выполняет: "+what+(tk.target?" ("+nm(tk.target)+")":"")+
-            ", готовность через "+Math.max(0,tk.td-now).toFixed(0)+" с.";
+            ", "+L("arrivesIn")+" "+Math.max(0,tk.ta-now).toFixed(0)+
+            " "+L("unitS")+".":
+          "<br>"+L("performing")+": "+what+(tk.target?" ("+nm(tk.target)+")":"")+
+            ", "+L("readyIn")+" "+Math.max(0,tk.td-now).toFixed(0)+
+            " "+L("unitS")+".";
       }
       return out;
     }
@@ -650,9 +658,9 @@ const PIX = (function(){
     comp(102,60, cm["CO-03"]||{}); comp(146,60, cm["CO-04"]||{});
 
     // сосуды с манометрами (шкалы: РЛ до 20, ЦРСД до 8, ЦРНД до 4 бар абс)
-    vessel(16,100,52,16, T.LEVEL_VE_HP||0, "РЛ", T.P_COND||0, 20);
-    vessel(78,100,44,16, T.LEVEL_VE_IP||0, "ЦРСД", T.P_SUC_IP||0, 8);
-    vessel(130,100,44,16, T.LEVEL_VE_LP||0, "ЦРНД", T.P_SUC_LP||0, 4);
+    vessel(16,100,52,16, T.LEVEL_VE_HP||0, mapLbl("РЛ"), T.P_COND||0, 20);
+    vessel(78,100,44,16, T.LEVEL_VE_IP||0, mapLbl("ЦРСД"), T.P_SUC_IP||0, 8);
+    vessel(130,100,44,16, T.LEVEL_VE_LP||0, mapLbl("ЦРНД"), T.P_SUC_LP||0, 4);
 
     // насосы
     const pu={}; (obs.pumps||[]).forEach(p=>pu[p.tag]=p.state);
@@ -762,39 +770,41 @@ const PIX = (function(){
       cx.fillRect(x*S-2,(y-3.2)*S,w+6,4*S);
       cx.fillStyle=fg||"#c9d1d6"; cx.fillText(t,x*S+1,(y)*S);
     }
-    for(const z of Object.values(ZONES)) plate(z.lbl, z.x+2, z.y+4.6);
+    for(const z of Object.values(ZONES))
+      plate(zoneLbl(z), z.x+2, z.y+4.6);
     cx.fillStyle="#98a1a8";
     cx.font='500 '+(S>=3?10:9)+'px "IBM Plex Mono",monospace';
     const L=(t,x,y,c)=>{ if(c)cx.fillStyle=c; cx.fillText(t,x*S,y*S); };
-    L("КД1",19,9.4); L("КД2",97,9.4,"#98a1a8");
-    L("КМ1",16,59.2); L("КМ2",60,59.2); L("КМ3",104,59.2); L("КМ4",148,59.2);
-    L("РЛ",17,99); L("ЦРСД",79,99); L("ЦРНД",131,99);
+    L(mapLbl("КД1"),19,9.4); L(mapLbl("КД2"),97,9.4,"#98a1a8");
+    L(mapLbl("КМ1"),16,59.2); L(mapLbl("КМ2"),60,59.2);
+    L(mapLbl("КМ3"),104,59.2); L(mapLbl("КМ4"),148,59.2);
+    L(mapLbl("РЛ"),17,99); L(mapLbl("ЦРСД"),79,99); L(mapLbl("ЦРНД"),131,99);
     const T2=obs.tags||{};
     L((T2.LEVEL_VE_HP||0).toFixed(0)+"%",34,124,"#8fc4e0");
     L((T2.LEVEL_VE_IP||0).toFixed(0)+"%",92,124);
     L((T2.LEVEL_VE_LP||0).toFixed(0)+"%",144,124);
-    L("НА3 НА4",84,141,"#98a1a8"); L("НА1 НА2",136,141);
-    L("ВО-1 · лёд "+(T2.M_ICE_T!==undefined?T2.M_ICE_T.toFixed(0):"—")+" т",
+    L(mapLbl("НА3 НА4"),84,141,"#98a1a8"); L(mapLbl("НА1 НА2"),136,141);
+    L(mapLbl("ВО-1")+" · "+L("ice")+" "+(T2.M_ICE_T!==undefined?T2.M_ICE_T.toFixed(0):"—")+" "+L("unitT"),
       16,156.5);
-    L("ВО-2",287,57); L("ВО-3",218,177); L("ВО-4",254,177);
-    L("ВО-5",304,177); L("ВО-6",340,177);
-    plate("молоко "+(T2.T_MILK!==undefined?T2.T_MILK.toFixed(1):"—")+" °С",
+    L(mapLbl("ВО-2"),287,57); L(mapLbl("ВО-3"),218,177); L(mapLbl("ВО-4"),254,177);
+    L(mapLbl("ВО-5"),304,177); L(mapLbl("ВО-6"),340,177);
+    plate(L("milk")+" "+(T2.T_MILK!==undefined?T2.T_MILK.toFixed(1):"—")+" "+L("unitC"),
       322,62.5,(T2.T_MILK||0)>6?"#e8a89b":"#cfe3d5");
     const mr=(T2.NH3_MACHINEROOM_PPM||0)*0.71, hl=(T2.NH3_HALL_PPM||0)*0.71;
-    plate("NH₃ "+mr.toFixed(0)+" мг/м³",130,60.5,
+    plate("NH₃ "+mr.toFixed(0)+" "+L("unitMg"),130,60.5,
       mr>18?"#e8a89b":"#9fb3a5");
-    plate("NH₃ "+hl.toFixed(0)+" мг/м³",332,150.5, hl>36?"#e8a89b":"#9fb3a5");
+    plate("NH₃ "+hl.toFixed(0)+" "+L("unitMg"),332,150.5, hl>36?"#e8a89b":"#9fb3a5");
     for(const [op,x,y,c] of labels){
       cx.font='600 '+(S>=3?10:9)+'px "IBM Plex Sans Condensed",sans-serif';
-      const t=op.replace("OP-","О-");
+      const t=op.replace("OP-",LANG==="en"?"W-":"О-");
       cx.fillStyle="rgba(18,20,23,.7)";
       cx.fillRect((x-4)*S,(y+1)*S,cx.measureText(t).width+4,3.4*S);
       cx.fillStyle=c; cx.fillText(t,(x-3.5)*S,(y+3.8)*S);
     }
     // легенда
     cx.font='500 '+(S>=3?10:9)+'px "IBM Plex Sans Condensed",sans-serif';
-    const leg=[["— жидкость",C.liq],["– – всас",C.suc],["— гор. пар",C.hot],
-      ["· газ по датчикам",C.haze]];
+    const leg=[["— "+L("legLiquid"),C.liq],["– – "+L("legSuction"),C.suc],
+      ["— "+L("legHotGas"),C.hot],["· "+L("legGas"),C.haze]];
     let lx=10*S;
     cx.fillStyle="rgba(18,20,23,.72)"; cx.fillRect(lx-4,(H-4.6)*S,118*S/ (S>=3?1.05:0.85),3.8*S);
     for(const [t,c] of leg){ cx.fillStyle=c; cx.fillText(t,lx,(H-1.6)*S);
@@ -803,12 +813,12 @@ const PIX = (function(){
       cx.fillStyle=C.bad;
       cx.font='700 '+(S>=3?13:11)+'px "IBM Plex Sans Condensed",sans-serif';
       if(Math.floor(fc/10)%2)
-        cx.fillText("ОБЩИЙ АВАРИЙНЫЙ СТОП",(W/2-34)*S,4.4*S);
+        cx.fillText(L("esdBanner"),(W/2-34)*S,4.4*S);
     } else if((obs.alarms||[]).length){
       // активная сигнализация (без общего стопа): мигающий транспарант
       if(Math.floor(fc/12)%2){
         cx.font='700 '+(S>=3?12:10)+'px "IBM Plex Sans Condensed",sans-serif';
-        const t="ТРЕВОГА ×"+obs.alarms.length;
+        const t=L("alarmBanner")+" ×"+obs.alarms.length;
         const w2=cx.measureText(t).width;
         cx.fillStyle="rgba(18,20,23,.72)";
         cx.fillRect((W/2)*S-w2/2-4,1.2*S,w2+8,3.6*S);
@@ -845,7 +855,7 @@ const PIX = (function(){
     const tg=document.getElementById("pixtoggle");
     if(tg) tg.onclick=()=>{ open=!open;
       document.getElementById("pixwrap").style.display=open?"":"none";
-      tg.textContent=open?"свернуть":"развернуть"; };
+      tg.textContent=open?L("collapse"):L("expand"); };
     requestAnimationFrame(draw);
   }
   return { init, hit, update:o=>{obs=o; renderInfo();} };

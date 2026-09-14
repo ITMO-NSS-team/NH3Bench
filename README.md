@@ -79,6 +79,46 @@ python3 tests/run_llm.py --scenarios S6 --model haiku
 python3 tests/report_metrics.py
 ```
 
+## Evaluate your own model
+
+Any model on OpenRouter, or Claude through the Claude Code CLI. Put
+`OPENROUTER_API_KEY=...` in `.env`. Details: `docs/BENCHMARK.md`.
+
+```bash
+python -m pip install -r requirements.txt
+
+python benchmark.py run --provider openrouter --model <slug> --scenarios S1
+python benchmark.py run --provider openrouter --model <slug>    # all six tasks
+python benchmark.py report
+```
+
+The run is saved to `results/`, with a per-decision transcript next to it, and the report
+prints your model alongside the published rows. To then watch it, build the trainer with
+your file (below).
+
+## Interactive demo
+
+One self-contained HTML file, opened straight from disk. `EN`/`RU` in the header.
+
+```bash
+python trainer/make_snapshots.py      # once, ~4 min
+python trainer/build_trainer.py       # -> trainer/NH3Ops-тренажёр-эксперта.html
+```
+
+- **Watch** — any of the 24 recorded runs, replayed through the same twin the models
+  faced; the panel keeps living while the model thinks. Click a decision to see what the
+  model saw and what it answered.
+- **Compare** — the score matrix; a cell marked ▸ opens that run.
+- **Quick try** — task 1 in about two minutes: a few choices instead of the full catalog.
+- **Take the task yourself** — the whole task, on the models' terms.
+
+Your own runs go in the same interface:
+
+```bash
+python trainer/build_trainer.py --llm results/llm.jsonl results/my_run.jsonl \
+       --out trainer/with-my-model.html
+```
+
 ## Documentation
 
 | File | Contents |
@@ -89,6 +129,7 @@ python3 tests/report_metrics.py
 | `docs/CALIBRATION.md` | method, acceptance criteria, current matrix, per-model runs |
 | `docs/VALIDATION.md` | twin validation plan, data inventory, findings |
 | `docs/VALIDATION-REPORT-ru.md` | physics-model validation report (Russian): data, findings, fixes, results |
+| `docs/BENCHMARK.md` | how to evaluate your own model: task, timing, running, reporting |
 | `docs/METRICS.md` | the metric set, the unified score, and what it does not mean |
 | `docs/LLM-BASELINE.md` | the first agent run, token-clock analysis, metered cost |
 | `docs/DECISIONS.md` | why things are the way they are |

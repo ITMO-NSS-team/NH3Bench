@@ -23,7 +23,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from nh3twin.scenarios import SCENARIOS
 from nh3twin.episode import Episode
-from nh3twin.llm_policy import ClaudeCLIPolicy, DEFAULT_CLI
+from nh3twin.llm_policy import DEFAULT_CLI
+from nh3twin.providers import (PROVIDERS, make_policy, accounting_of,
+                              _sanitize)
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT_DIR = os.path.join(ROOT, "results")
@@ -44,10 +46,28 @@ def already_done(out_path):
     return done
 
 
+def _commit() -> str:
+    """Версия бенчмарка на момент прогона."""
+    try:
+        import subprocess
+        r = subprocess.run(["git", "-C", ROOT, "rev-parse", "--short", "HEAD"],
+                           capture_output=True, text=True, timeout=10)
+        return r.stdout.strip() or "unknown"
+    except Exception:
+        return "unknown"
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--scenarios", default="S1,S2,S3,S4,S5")
     ap.add_argument("--model", default="haiku")
+    # Провайдер по умолчанию -- тот, которым получены опубликованные прогоны:
+    # прежняя команда должна воспроизводиться дословно.
+    ap.add_argument("--provider", default="claude-cli", choices=PROVIDERS)
+    ap.add_argument("--base-url", default="",
+                    help="переопределить адрес API провайдера")
+    ap.add_argument("--temperature", type=float, default=None)
+    ap.add_argument("--max-tokens", type=int, default=None)
     ap.add_argument("--seeds", default="1")
     ap.add_argument("--history", type=int, default=14,
                     help="сколько последних действий показывать модели")
@@ -55,6 +75,9 @@ def main():
     ap.add_argument("--cli", default=DEFAULT_CLI)
     ap.add_argument("--tag", default="", help="суффикс имени политики")
     ap.add_argument("--out", default=os.path.join(OUT_DIR, "llm.jsonl"))
+    # Пробные прогоны не должны смешиваться с опубликованными протоколами:
+    # tests/replay_llm.py собирает их по маске и дописал бы пробу в матрицу.
+    ap.add_argument("--trace-dir", default=TRACE_DIR)
     args = ap.parse_args()
 
     pol_name = f"llm:{args.model}" + (f":{args.tag}" if args.tag else "")
@@ -68,8 +91,12 @@ def main():
             if (sid, pol_name, seed) in done:
                 print(f"== {sid}/{pol_name}/{seed} уже есть", flush=True)
                 continue
+            # Слаги OpenRouter содержат косую черту (google/gemini-3.7-flash),
+            # поэтому имя файла протокола обезвреживается отдельно, иначе путь
+            # уехал бы в несуществующий подкаталог.
+            os.makedirs(args.trace_dir, exist_ok=True)
             trace = os.path.join(
-                TRACE_DIR, f"{pol_name.replace(':', '_')}_{sid}_s{seed}.jsonl")
+                args.trace_dir, f"{_sanitize(pol_name)}_{sid}_s{seed}.jsonl")
             if os.path.exists(trace):
                 os.remove(trace)
             print(f"== {sid}/{pol_name}/{seed}: старт "
@@ -79,11 +106,14 @@ def main():
             try:
                 ep = Episode(SCENARIOS[sid], seed=seed)
                 ep._policy_name = pol_name
-                pol = ClaudeCLIPolicy(model=args.model, cli=args.cli,
-                                      history=args.history,
-                                      timeout=args.timeout,
-                                      trace_path=trace, label=pol_name,
-                                      verbose=True)
+                pol = make_policy(args.provider, args.model, cli=args.cli,
+                                  history=args.history,
+                                  timeout=args.timeout,
+                                  trace_path=trace, label=pol_name,
+                                  verbose=True,
+                                  base_url=args.base_url or None,
+                                  temperature=args.temperature,
+                                  max_tokens=args.max_tokens)
                 r = ep.run(pol)
                 r["policy"] = pol_name
                 seg = ep.plant.segments.get("EV-03")
@@ -103,6 +133,14 @@ def main():
                 r["llm"]["history"] = args.history
                 r["llm"]["tokens_per_decision"] = (
                     round(pol.stats.out_tokens / max(pol.stats.calls, 1), 1))
+                # Паспорт прогона. Без него строку таблицы невозможно
+                # воспроизвести и нельзя понять, сопоставима ли она с
+                # остальными по времени: виртуальные секунды считаются из
+                # токенов, и способ их учёта -- часть условий испытания.
+                r["llm"].update(provider=args.provider,
+                                token_accounting=accounting_of(pol),
+                                prompt_lang="ru",
+                                commit=_commit())
                 r["trace"] = os.path.relpath(trace, ROOT).replace("\\", "/")
             except Exception:
                 r = {"scenario": sid, "policy": pol_name, "seed": seed,
