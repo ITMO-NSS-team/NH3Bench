@@ -339,7 +339,9 @@ function handle(m){
   else if(m.type==='final'){
     if(mode==="watch" && !WM.forceFinal){ lockUI(false); watchFinalReady(m.data); }
     else if(mode==="quick"){ lockUI(false); quickFinalData(m.data); }
-    else showFinal(m.data); }
+    else { if(typeof WM!=="undefined" && WM.markWatched && m.data){
+             m.data.watched=true; WM.markWatched=false; }
+           showFinal(m.data); } }
   else if(m.type==='fatal'){ fatal(L("err.generic")+": "+m.err); showScreen("load"); }
   else if(m.type==='selftest'){
     const cats=(m.cats||[]).map(c=>outcomeCode(c)).join(", ")||"—";
@@ -805,6 +807,9 @@ function showFinal(f){
     "</div>").join("");
   // Балл пришёл из двойника, где его посчитала та же metrics.bench_score_run,
   // которой посчитаны опубликованные клетки. Здесь его только показываем.
+  // Заголовок блока: чужая запись -- не «ваш результат».
+  const fh=$("#fminehd");
+  if(fh) fh.textContent=f.watched?L("finMineRun"):L("finMine");
   const fm=$("#fmine");
   if(fm){
     let mh="";
@@ -813,9 +818,13 @@ function showFinal(f){
         (f.forced?" <span class='mut'>("+L("mineStoppedNote")+")</span>":"")+
         "</div>";
     }
-    if(typeof mineAddHTML==="function") mh+=mineAddHTML("human");
-    fm.innerHTML=mh;
-    if(typeof mineBind==="function") mineBind(f,"human");
+    // Пересмотр записи -- не свой прогон: человек её не проходил,
+    // и в таблице своих результатов ей места нет.
+    if(!f.watched){
+      if(typeof mineAddHTML==="function") mh+=mineAddHTML("human");
+      fm.innerHTML=mh;
+      if(typeof mineBind==="function") mineBind(f,"human",fm);
+    } else { fm.innerHTML=mh; }
   }
   showScreen("final");
 }
@@ -1039,8 +1048,13 @@ button.lnk{background:none;border:none;color:var(--line);cursor:pointer;
  box-shadow:0 0 5px var(--bad);cursor:help}
 /* бегущая метка текущего времени и полоса размышления */
 .tl{cursor:pointer}
+/* Бегунок -- единственное, чем перематывают, поэтому он ловит мышь.
+   Сама метка 2 пикселя, за неё не ухватиться: зону захвата даёт
+   прозрачный ::before, щелчок по нему приходит на сам бегунок. */
 .tl i.now{width:2px!important;background:var(--tx);opacity:1;z-index:3;
- box-shadow:0 0 4px rgba(255,255,255,.5);pointer-events:none}
+ box-shadow:0 0 4px rgba(255,255,255,.5);cursor:ew-resize}
+.tl i.now::before{content:"";position:absolute;left:-9px;right:-9px;
+ top:-2px;bottom:-11px}
 .tl i.now.ended{background:var(--bad);box-shadow:0 0 7px var(--bad)}
 .tl i.now.drag{background:var(--warn);box-shadow:0 0 6px var(--warn)}
 /* ручка перемотки: треугольник под бегунком */
@@ -1305,7 +1319,7 @@ HTML = r"""<!DOCTYPE html>
   </div>
   <div class="card" style="margin-top:10px"><h2 data-i18n="fin.acts">Ваши команды</h2>
     <div class="bd"><table id="facts"></table></div></div>
-  <div class="card" style="margin-top:10px"><h2><span data-i18n="fin.mine">Ваш результат</span></h2>
+  <div class="card" style="margin-top:10px"><h2><span id="fminehd">Ваш результат</span></h2>
     <div id="fmine"></div></div>
   <div class="card" style="margin-top:10px"><h2 data-i18n="fin.note">Замечание эксперта к задаче</h2>
     <div class="bd">

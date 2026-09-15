@@ -78,7 +78,6 @@ const I18N = {
   "fin.ref": "How the reference operators did this task",
   "fin.events": "Plant events",
   "fin.acts": "Your commands",
-  "fin.mine": "Your result",
   "fin.note": "Expert's remark on the task",
   "fin.noteph": "what looked unrealistic, what was missing, how you would " +
     "have acted…",
@@ -133,8 +132,9 @@ const I18N_JS = {
   ponr: "point of no return",
   ponrTag: "PONR",
   tlLegend: "bar width = deliberation tokens · dim = no action · " +
-            "yellow = current decision · white handle = task time, drag " +
-            "to seek · red line = point of no return (PONR)",
+            "yellow = current decision · click the bar to read a decision " +
+            "· drag the white handle to seek · red line = point of no " +
+            "return (PONR)",
   outcome: "Outcome",
   score: "score",
   mean: "mean",
@@ -192,6 +192,7 @@ const I18N_JS = {
   mineStoppedNote: "task ended by hand, not counted in the mean",
   mineReplaced: "the earlier result for this task in this experiment was " +
                 "replaced",
+  mineNoRoom: "could not save: the browser refused to store it",
   mineNothing: "no runs of your own yet",
   mineClear: "delete all my runs",
   mineScoredBy: "scored by the same functions as the published rows",
@@ -353,6 +354,8 @@ const I18N_JS = {
   esd: "plant shutdown",
   yes: "yes",
   no: "no",
+  finMine: "Your result",
+  finMineRun: "This run's result",
   maxDose: "Highest personnel dose",
   refOperator: "Reference operator",
   stRunning: "self-test running (about half a minute)…",
@@ -789,8 +792,22 @@ const REPLY_RULES = [
   [/^не исполнено: (.*)$/, (m) => "not executed: " + m[1]],
 ];
 
+// Причину аварийного останова имитатор пишет как «команда агента»: ему
+// всё равно, кто у щита. В тренажёре это известно, и человеку, который сам
+// нажал кнопку, писать «команда агента» нельзя -- ни по-русски, ни
+// по-английски. Подменяется только эта строка и только при игре человека.
+function esdByPerson() {
+  return typeof mode !== "undefined" && mode !== "watch";
+}
+
 function plantReply(text) {
   const t = String(text == null ? "" : text).trim();
+  const esd = t.match(/^(Аварийный останов: )?команда агента$/);
+  if (esd && esdByPerson()) {
+    const head = esd[1]
+      ? (LANG === "en" ? "Emergency shutdown: " : "Аварийный останов: ") : "";
+    return head + (LANG === "en" ? "your command" : "ваша команда");
+  }
   if (LANG !== "en" || !t) return TR(t);
   for (const [re, fn] of REPLY_RULES) {
     const m = t.match(re);
@@ -1026,6 +1043,11 @@ function runLabel(r) {
   let s = r.agent;
   if (r.kind === "user") {
     s += LANG === "en" ? " (own run)" : " (свой прогон)";
+  }
+  // Своё прохождение в браузере: человек или быстрая проба.
+  if (r.kind === "human" || r.kind === "quick") {
+    s += " (" + L("mineOwn") + ", " +
+         L(r.kind === "quick" ? "mineQuick" : "mineHuman") + ")";
   }
   if (r.prompt_lang && r.prompt_lang !== "ru") {
     s += (LANG === "en" ? ", " + r.prompt_lang.toUpperCase() + " task"

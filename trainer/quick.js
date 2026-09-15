@@ -399,7 +399,8 @@ function quickShowResult() {
        "<button id='qhub'>" + L("hub") + "</button></div>";
   $("#qbox").innerHTML = h;
   if (typeof mineBind === "function" && QM.finalData) {
-    mineBind(Object.assign({ sid: "S1" }, QM.finalData), "quick");
+    mineBind(Object.assign({ sid: "S1" }, QM.finalData), "quick",
+             $("#qbox"));
   }
   $("#qagain").onclick = startQuick;
   $("#qfull").onclick = () => { quickLeave();

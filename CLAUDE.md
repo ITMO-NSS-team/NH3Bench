@@ -233,6 +233,20 @@ is recorded in `docs/DECISIONS.md`.
   be recomputed in the browser — `demo_manifest` publishes it as `esd_just`, the page
   passes it into `{cmd:'start'}`, and the session keeps it for every `final()`. Get it
   wrong and an emergency stop is charged (or not) against the wrong baseline.
+- **Watching a recording is not a run of your own.** `showFinal` serves the human task,
+  the quick try and the replay of a recorded run; a watched run already has a published
+  row, and storing it again as "mine" would put someone else's decisions into the
+  visitor's results. The mark rides on the final data (`f.watched`, set by
+  `watchFinalReady`), *not* on `mode`: the "show the final" button calls `watchLeave()`
+  first, which sets `mode = "play"`, so by the time the screen is drawn the mode says
+  nothing about where the data came from.
+- **A human run is comparable with any agent run, decision by decision.** The visitor's
+  own run keeps its command sequence (`records` in `localStorage`, `[second, command,
+  seconds spent]`), so `diffRuns` offers it next to the published ones and `diffAlign`
+  lines the two up by command — the plant, the clock and the catalog are the same. The
+  cost column shows seconds rather than tokens: a person spends no tokens, but the twin
+  charged their deliberation to the same clock. Such a run is deliberately *not*
+  watchable — replaying it would need a per-decision transcript.
 - **A quick-try result is never a benchmark result, and a hand-stopped task is not a
   completed one.** Both are stored (`kind:"quick"`, `forced:true`), both are shown with a
   mark, and neither enters a mean or a Regulation Gap — `mine.js` sets `scored:false`.
@@ -458,6 +472,13 @@ will silently send every task start back to a full warm-up.
   `key: L("key")` — infinite recursion that hangs the page on load; and replacing a
   fragment that ends mid-string swallows a quote. Split the file at the end of the
   dictionary before substituting, and parse afterwards.
+- **The simulator does not know who is at the panel, and the trainer does.** The reason
+  it records for a commanded emergency stop is always «команда агента» — right for an
+  agent run, plainly wrong for the person who just pressed the button, and the same in
+  both languages. The simulator's text stays as it is (the published traces are built on
+  it); `plantReply` substitutes «ваша команда» / "your command" for that one string, and
+  only outside watch mode. Anything the simulator writes about *who* acted needs the same
+  treatment — the display layer is the only place that knows.
 - **The tail of a translation rule is where Russian hides.** `Аварийный останов: (.*)`
   passed its reason through unchanged, so an emergency stop read
   "Emergency shutdown: команда агента". Reasons that arrive in Latin
@@ -486,6 +507,27 @@ will silently send every task start back to a full warm-up.
   in the header (`#leaveb`), works in all three modes, and the `#busy` overlay starts
   below the header instead of covering it — otherwise the button is there but unclickable
   while a command executes.
+- **Reading an undeclared variable is a `ReferenceError`, and it takes the whole screen
+  with it.** `inspectStep` read `a` (meant to be the catalog entry, for the action's
+  execution latency) without declaring it, so the decision card never opened — a click on
+  the timeline simply did nothing, which in a UI reads as "the menu is gone", not as an
+  error. `grep` rates the line as fine; only executing the bundle finds it.
+- **Seeking belongs to the handle, and a 2 px handle with `pointer-events:none` cannot be
+  grabbed.** The drag was therefore bound to the whole strip, and a click aimed at a
+  decision mark (2–14 px wide) moved the replay instead of opening that decision. The
+  handle now takes the mouse and carries a transparent ±9 px grab zone (a `::before`, so
+  the event target is still the handle), and a click anywhere on the strip opens the
+  nearest decision — the marks are too thin to be a reliable target on their own.
+- **One block on two screens must not be found by `id`.** The "add to the results table"
+  block is emitted by the same `mineAddHTML` on the quick-try screen and on the task
+  result screen. Both stay in the document, the quick screen sits higher in the markup,
+  so `document.getElementById("mineaddb")` returned the *hidden* quick-try button and the
+  handler was attached to it — the visible button did nothing at all. The block's parts
+  are marked with classes now and looked up inside the container the caller passes
+  (`mineBind(f, kind, box)`).
+- **A storage write that the browser refuses must be visible.** `mineSave` returns false
+  in a private window or when the quota is exhausted; `mineAdd` ignored it, so the screen
+  said "added" while nothing was stored. The answer now reaches the line under the button.
 - **`data-i18n` goes on the element that holds the text and nothing else.** Put it on a
   container and `textContent` wipes out the child elements along with their handlers —
   which is how the "history" button disappeared. `applyLang` now skips elements that have

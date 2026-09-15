@@ -49,9 +49,9 @@ const WL = {
   ponr: "точка невозврата",
   ponrTag: "невозврат",
   tlLegend: "толщина отметки — цена раздумий в токенах · приглушённая — " +
-            "бездействие · жёлтая — текущее решение · белый бегунок — " +
-            "время задачи, за него можно тянуть · красная черта — точка " +
-            "невозврата",
+            "бездействие · жёлтая — текущее решение · щелчок по полосе " +
+            "открывает решение · перемотка — за белый бегунок · красная " +
+            "черта — точка невозврата",
   outcome: "Исход",
   score: "балл",
   mean: "среднее",
@@ -216,6 +216,8 @@ const WL = {
   esd: "общий стоп",
   yes: "да",
   no: "нет",
+  finMine: "Ваш результат",
+  finMineRun: "Результат этого прогона",
   maxDose: "Наибольшая доза персонала",
   refOperator: "Опорный оператор",
   stRunning: "проверка идёт (полминуты)…",
@@ -328,7 +330,11 @@ let WM = {            // состояние просмотра
   tPrevWall: 0,
 };
 
-function wRun(id) { return MANIFEST.runs.find(r => r.id === id); }
+function wRun(id) {
+  // Свой прогон живёт в браузере, а не в манифесте.
+  return MANIFEST.runs.find(r => r.id === id) ||
+    ((typeof mineDiffRunById === "function") ? mineDiffRunById(id) : null);
+}
 function wScen(sid) { return MANIFEST.scenarios.find(s => s.sid === sid); }
 
 // ---------------------------------------------------------------------
@@ -604,6 +610,9 @@ function watchEnded(t) {
 }
 
 function watchFinalReady(data) {
+  // Признак «это итог записи» едет вместе с данными: mode к моменту
+  // показа итога уже переключён обратно на игру.
+  if (data) data.watched = true;
   WM.finalData = data;
   WM.phase = "over";
   WM.playing = false;
@@ -797,7 +806,9 @@ function renderWatchCtl() {
     WM.forceFinal = true;
     watchLeave();
     if (data) showFinal(data);
-    else { lockUI(true); post({ cmd: "final" }); }
+    // Итог ещё не запрошен: помечаем разово, чтобы пометку получил именно
+    // этот ответ двойника, а не следующий итог человека.
+    else { WM.markWatched = true; lockUI(true); post({ cmd: "final" }); }
   };
   $("#wagain").onclick = () => { clearTimeout(WM.timer);
                                  startWatch(WM.runId); };
@@ -913,8 +924,24 @@ function bindSeek() {
     return isFinite(t) ? t : null;
   };
 
+  // Щелчок по полосе открывает ближайшее решение: отметка шириной
+  // две-четыре точки, попасть в неё мышью трудно, а спросить «что здесь
+  // происходило» хочется именно так. Сразу после перетаскивания щелчок
+  // не считается -- иначе отпускание бегунка открывало бы карточку.
+  box.addEventListener("click", (ev) => {
+    if (Date.now() - (WM.dragEnd || 0) < 250) return;
+    const cl = ev.target.classList;
+    if (cl.contains("d") || cl.contains("now")) return;
+    const t = pick(ev);
+    if (t === null) return;
+    const i = nearestStep(t);
+    if (i >= 0) inspectStep(i);
+  });
+
   box.addEventListener("mousedown", (ev) => {
-    if (ev.target.classList.contains("d")) return;   // это клик по решению
+    // Перемотка -- только за бегунок. Пока она висела на всей полосе,
+    // промах по отметке решения уводил просмотр вперёд.
+    if (!ev.target.classList.contains("now")) return;
     if (!box.querySelector(".tl")) return;
     const t0 = pick(ev);
     if (t0 === null) return;
@@ -940,6 +967,7 @@ function bindSeek() {
       document.removeEventListener("mouseup", up);
       if (!WM.dragging) return;
       WM.dragging = false;
+      WM.dragEnd = Date.now();
       const t = WM.dragT;
       WM.dragT = null;
       if (t !== null && isFinite(t)) seekTo(t);
@@ -947,6 +975,16 @@ function bindSeek() {
     document.addEventListener("mousemove", move);
     document.addEventListener("mouseup", up);
   });
+}
+
+// Ближайшее к моменту t решение -- для щелчка по полосе.
+function nearestStep(t) {
+  let best = -1, bd = Infinity;
+  WM.steps.forEach((s, i) => {
+    const d = Math.abs((s.t_rel || 0) - t);
+    if (d < bd) { bd = d; best = i; }
+  });
+  return best;
 }
 
 // Перемотка к заданному времени задачи.
@@ -1026,6 +1064,8 @@ function inspectStep(i) {
   const s = WM.steps[i];
   if (!s) return;
   const think = (s.tokens || 0) / MANIFEST.benchmark.think_rate_tok_per_s;
+  // Задержка исполнения команды -- из каталога: в записи прогона её нет.
+  const a = BYID[s.action];
   let h = "<h3>" + L("decision") + " " + (i + 1) + " · " + hhmmss(s.t_rel) +
           "</h3>";
   h += "<table class='kv'>";
@@ -1062,8 +1102,12 @@ function inspectStep(i) {
 
 // Решения прогона из его протокола: время наблюдения, команда, токены.
 function diffSteps(runId) {
-  const tr = TRACES[runId] || [];
-  return tr.map((s, i) => ({
+  const tr = TRACES[runId];
+  if (!tr && typeof mineDiffSteps === "function") {
+    const m = mineDiffSteps(runId);
+    if (m) return m;
+  }
+  return (tr || []).map((s, i) => ({
     i: i + 1,
     t: s.t_rel,
     aid: s.action || "",
@@ -1125,7 +1169,11 @@ function diffPairBlocks(rows) {
 
 // Прогоны, у которых есть протокол, по задачам.
 function diffRuns(sid) {
-  return MANIFEST.runs.filter(r => r.scenario === sid && r.watchable);
+  const pub = MANIFEST.runs.filter(r => r.scenario === sid && r.watchable);
+  // Своё прохождение сравнимо с любым прогоном: установка та же, набор
+  // команд тот же, выравнивание идёт по командам.
+  const mine = (typeof mineDiffRuns === "function") ? mineDiffRuns(sid) : [];
+  return pub.concat(mine);
 }
 
 function showDiff(sid, idA, idB) {
@@ -1199,7 +1247,9 @@ function showDiff(sid, idA, idB) {
       : (x.a && x.b) ? "dif" : (x.a ? "onlya" : "onlyb");
     const cell = s => s
       ? "<td class='tm'>" + hhmmss(s.t) + "</td><td>" + actText(s.aid) +
-        "<span class='tk'>" + s.tokens + " " + L("tokShort") + "</span></td>"
+        "<span class='tk'>" + (s.secs === undefined
+          ? s.tokens + " " + L("tokShort")
+          : "+" + s.secs + " " + L("unitS")) + "</span></td>"
       : "<td class='tm'></td><td class='na'></td>";
     h += "<tr class='" + cls + "'>" + cell(x.a) + cell(x.b) + "</tr>";
   });

@@ -35,6 +35,7 @@ const ML = {
   mineStopped: "прервано",
   mineStoppedNote: "задача завершена вручную, в среднее не входит",
   mineReplaced: "прежний результат этой задачи в этом опыте заменён",
+  mineNoRoom: "не удалось сохранить: память браузера не приняла запись",
   mineNothing: "своих прогонов пока нет",
   mineClear: "удалить все свои прогоны",
   mineScoredBy: "балл посчитан теми же функциями, что и опубликованные",
@@ -79,11 +80,21 @@ function mineRun(f, kind, name) {
   const sc = (typeof SCEN !== "undefined")
     ? SCEN.find(x => x.sid === f.sid) : null;
   const forced = !!f.forced;
+  // Протокол хранится вместе с итогом: без последовательности команд свой
+  // прогон нельзя поставить рядом с прогоном модели в сравнении решений.
+  // Формат сжатый -- [секунда, команда, цена решения в секундах].
+  const rec = (f.records || []).slice(0, 400)
+    .map(r => [Math.round(r.t || 0), String(r.aid || ""),
+               Math.round(r.think || 0)])
+    .filter(r => r[1]);
   return {
     id: "mine:" + Date.now() + ":" + Math.random().toString(36).slice(2, 7),
     kind: kind === "quick" ? "quick" : "human",
     agent: String(name || mineName()).slice(0, 40),
     scenario: f.sid,
+    records: rec,
+    // Язык задания -- часть того, что человек читал, ровно как у модели.
+    prompt_lang: (typeof LANG !== "undefined" && LANG === "en") ? "en" : "ru",
     score: (f.score === null || f.score === undefined) ? null : f.score,
     CAT: f.CAT || [], MAJ: f.MAJ || [],
     esd: !!f.esd,
@@ -105,8 +116,10 @@ function mineAdd(f, kind, name) {
                                  && x.scenario === r.scenario));
   const replaced = arr.length - kept.length;
   kept.push(r);
-  mineSave(kept);
-  return { run: r, replaced: replaced };
+  // Ответ хранилища важен: в приватном окне и при переполнении запись не
+  // проходит, и говорить «добавлено» в этом случае нельзя.
+  const ok = mineSave(kept);
+  return { run: r, replaced: replaced, ok: ok };
 }
 
 function mineDelAgent(kind, agent) {
@@ -151,32 +164,85 @@ function mineAgents() {
 }
 
 // ---------------------------------------------------------------------
+// Свой прогон в сравнении решений
+//
+// Сравнение выравнивает две последовательности команд; физика у своего
+// прохождения та же, что у прогона модели, поэтому строки сопоставимы.
+// Пересчёта здесь нет: время, команды и цена решения -- из протокола.
+// ---------------------------------------------------------------------
+
+function mineShape(r) {
+  return {
+    id: r.id, kind: r.kind, agent: r.agent, scenario: r.scenario,
+    prompt_lang: r.prompt_lang || "ru",
+    score: (r.score === null || r.score === undefined) ? "—" : r.score,
+    CAT: r.CAT || [], MAJ: r.MAJ || [], esd: !!r.esd,
+    clean: !(r.CAT || []).length && !(r.MAJ || []).length,
+    t_end_s: r.t_end_s, horizon_s: r.horizon_s,
+    forced: !!r.forced, mine: true,
+    // В просмотр запись не идёт: двойник её не переигрывает, там нужен
+    // протокол с токенами. В сравнении решений она полноценна.
+    watchable: false,
+    trace_stats: { n_decisions: (r.records || []).length },
+  };
+}
+
+function mineDiffRuns(sid) {
+  return mineLoad()
+    .filter(r => r.scenario === sid && (r.records || []).length)
+    .map(mineShape);
+}
+
+function mineDiffRunById(id) {
+  const r = mineLoad().find(x => x.id === id);
+  return r ? mineShape(r) : null;
+}
+
+// Цена решения человека -- секунды, а не токены: он их не тратит, но часы
+// задачи ему начислены теми же секундами.
+function mineDiffSteps(id) {
+  const r = mineLoad().find(x => x.id === id);
+  if (!r) return null;
+  return (r.records || []).map((x, i) => ({
+    i: i + 1, t: x[0], aid: x[1], tokens: 0, secs: x[2], status: "ok",
+  })).filter(s => s.aid);
+}
+
+// ---------------------------------------------------------------------
 // Добавление из итогового экрана и из быстрой пробы
 // ---------------------------------------------------------------------
 
 // Один и тот же блок на двух экранах: поле с названием опыта и кнопка.
 // Название запоминается, поэтому вторая задача попадает в тот же опыт без
 // повторного ввода.
+// Элементы помечены классами, а не id: этот блок живёт сразу на двух
+// экранах, и поиск по id находил кнопку чужого экрана -- она стоит в
+// разметке выше, поэтому обработчик уходил на невидимую кнопку.
 function mineAddHTML(kind) {
   return "<div class='mineadd'>" +
     "<span class='lbl'>" + L("mineAdd") + "</span>" +
-    "<input id='minename' maxlength='40' value='" + esc(mineName()) +
+    "<input class='minename' maxlength='40' value='" + esc(mineName()) +
     "' data-ph='" + esc(L("mineName")) + "' placeholder='" +
     esc(L("mineName")) + "'>" +
-    "<button id='mineaddb'>" + L("mineAddBtn") + "</button>" +
-    "<span id='mineres' class='mut'></span>" +
+    "<button class='mineaddb'>" + L("mineAddBtn") + "</button>" +
+    "<span class='mineres mut'></span>" +
     (kind === "quick" ? "<div class='mut'>" + L("mineQuickNote") + "</div>"
                       : "<div class='mut'>" + L("mineScoredBy") + "</div>") +
     "</div>";
 }
 
-function mineBind(f, kind) {
-  const b = document.getElementById("mineaddb");
+function mineBind(f, kind, box) {
+  const root = box || document;
+  const b = root.querySelector(".mineaddb");
   if (!b) return;
   b.onclick = () => {
-    const name = mineSetName((document.getElementById("minename") || {}).value);
+    const name = mineSetName((root.querySelector(".minename") || {}).value);
     const r = mineAdd(f, kind, name);
-    const res = document.getElementById("mineres");
+    const res = root.querySelector(".mineres");
+    if (res && !r.ok) {
+      res.textContent = L("mineNoRoom");
+      return;
+    }
     if (res) {
       res.textContent = L("mineAdded") + " — " + name + ". " +
         (r.replaced ? L("mineReplaced") + ". " : "");
