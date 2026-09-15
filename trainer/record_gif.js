@@ -6,7 +6,9 @@ const { pathToFileURL } = require('url');
 const fs = require('fs');
 const path = require('path');
 
-const HTML = 'D:/claude/nh3/NH3Bench/trainer/NH3Ops-тренажёр-эксперта.html';
+// Путь считается от самого скрипта: абсолютный путь с чужой машины
+// здесь не работал.
+const HTML = path.join(__dirname, 'nh3bench-demo.html');
 const SID_INDEX = Number(process.env.SID_INDEX ?? 1);   // 0=S1, 1=S2, ...
 const OUTDIR = process.env.OUTDIR || 'frames_s2';
 // План прогона: [секунды ожидания, кадров снять]. null => отправить наряд.

@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """Сборка экспертного описания в один HTML-файл."""
-import json, os, sys
+import json
+import os, os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from expert_doc_text import (TITLE, SUBTITLE, PURPOSE, INTRO, TWIN, BENCH,
                              S1, S2, S3, S4, S5, FINAL, TABLE1)
@@ -454,6 +455,7 @@ parts.append(FINAL)
 parts.append("</div></body></html>")
 
 out = "\n".join(parts)
-path = "/mnt/user-data/outputs/NH3Ops-описание-для-эксперта.html"
+path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                    "nh3bench-expert-guide.html")
 open(path, "w", encoding="utf-8").write(out)
 print("записан:", path, round(len(out) / 1024), "КБ")

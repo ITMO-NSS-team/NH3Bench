@@ -47,6 +47,10 @@ import report_metrics as R                                          # noqa: E402
 # законно лежат в собственном файле (base_S6.jsonl, ponr_S6.json).
 BASE_GLOBS = ["results/baselines.jsonl", "results/base_S*.jsonl"]
 LLM_GLOBS = ["results/llm.jsonl"]
+# Прогоны, измеренные пользователем самостоятельно (benchmark.py run). Лежат
+# отдельно от опубликованной матрицы и помечены в таблице как свои: 24
+# опубликованных прогона сделаны в прежнем порядке и пересъёмке не подлежат.
+USER_GLOBS = ["results/user/*.jsonl"]
 PONR_GLOBS = ["results/ponr.json", "results/ponr_S*.json"]
 OUT = "trainer/demo_manifest.json"
 
@@ -61,7 +65,12 @@ TRACE_KEEP = ("t_rel", "action", "status", "tokens", "wall_s", "error", "reply")
 # Загрузка
 # =========================================================================
 
-def _load_rows(globs):
+def _load_rows(globs, src="base"):
+    """Строки прогонов с пометкой источника.
+
+    Источник нужен для склейки: один и тот же слаг модели, измеренный
+    пользователем, не должен слиться с опубликованной строкой.
+    """
     rows = []
     for pat in globs:
         for path in sorted(glob.glob(os.path.join(ROOT, pat))):
@@ -69,7 +78,9 @@ def _load_rows(globs):
                 for line in fh:
                     line = line.strip()
                     if line:
-                        rows.append(json.loads(line))
+                        r = json.loads(line)
+                        r["_src"] = src
+                        rows.append(r)
     return rows
 
 
@@ -138,14 +149,34 @@ def _dedup(rows):
     """
     out = {}
     for r in rows:
-        out[(r.get("scenario"), r.get("policy"), r.get("seed"))] = r
+        out[(r.get("scenario"), r.get("policy"), r.get("seed"),
+             r.get("_src", "base"), _lang(r))] = r
     return list(out.values())
 
 
-def build(base_globs=BASE_GLOBS, llm_globs=LLM_GLOBS, ponr_globs=PONR_GLOBS):
-    base = _load_rows(base_globs)
-    llm = _load_rows(llm_globs)
-    allrows = _dedup(base + llm)
+def _lang(row) -> str:
+    """Язык задания прогона. Опорные политики промпта не видят -- ru."""
+    return ((row.get("llm") or {}).get("prompt_lang") or "ru")
+
+
+def _run_key(row) -> str:
+    """Идентификатор прогона в манифесте: источник + политика + задача.
+
+    Собирается в одном месте: самопроверка ищет трейс по этому же ключу, и
+    расхождение оставило бы её без данных -- молча, с нулём проверенных
+    шагов вместо двух тысяч.
+    """
+    lang = _lang(row)
+    return (row.get("_src", "base") + "/" + _run_id(row)
+            + ("" if lang == "ru" else "@" + lang))
+
+
+def build(base_globs=BASE_GLOBS, llm_globs=LLM_GLOBS, ponr_globs=PONR_GLOBS,
+          user_globs=USER_GLOBS):
+    base = _load_rows(base_globs, "base")
+    llm = _load_rows(llm_globs, "llm")
+    user = _load_rows(user_globs, "user")
+    allrows = _dedup(base + llm + user)
 
     by = {(r.get("scenario"), r.get("policy"), r.get("seed")): r
           for r in allrows}
@@ -162,12 +193,14 @@ def build(base_globs=BASE_GLOBS, llm_globs=LLM_GLOBS, ponr_globs=PONR_GLOBS):
         is_model = pol.startswith("llm:")
         trace = row.get("trace")
         runs.append({
-            "id": _run_id(row),
-            "kind": "model" if is_model else "policy",
+            "id": _run_key(row),
+            "kind": ("user" if row.get("_src") == "user"
+                     else "model" if is_model else "policy"),
             "agent": pol[4:] if is_model else pol,
             "policy": pol,
             "scenario": sid,
             "seed": row.get("seed", 1),
+            "prompt_lang": _lang(row),
             "score": M.bench_score_run(row),
             "outcome": R.outcome(row),
             "prevented": bool(row.get("prevented")),
@@ -210,10 +243,12 @@ def build(base_globs=BASE_GLOBS, llm_globs=LLM_GLOBS, ponr_globs=PONR_GLOBS):
 
     agents = {}
     for r in runs:
-        a = agents.setdefault(r["agent"], {
-            "id": r["agent"], "kind": r["kind"],
-            "scores": {}, "watchable": 0,
-        })
+        a = agents.setdefault(
+            r["kind"] + "|" + r["prompt_lang"] + "|" + r["agent"], {
+                "id": r["agent"], "kind": r["kind"],
+                "prompt_lang": r["prompt_lang"],
+                "scores": {}, "watchable": 0,
+            })
         a["scores"][r["scenario"]] = r["score"]
         a["watchable"] += 1 if r["watchable"] else 0
     n_total = len({s["sid"] for s in scenarios})
@@ -229,12 +264,22 @@ def build(base_globs=BASE_GLOBS, llm_globs=LLM_GLOBS, ponr_globs=PONR_GLOBS):
         a["complete"] = len(vals) == n_total
         name, desc = R.policy_legend(a["id"] if a["kind"] == "policy"
                                      else "llm:" + a["id"])
+        if a["kind"] == "user":
+            name = f"{a['id']} (свой прогон)"
+            desc = ("измерено пользователем через benchmark.py run; не часть "
+                    "опубликованной матрицы")
+        if a.get("prompt_lang", "ru") != "ru":
+            # Задание на другом языке -- другой столбец, а не та же строка:
+            # опубликованные прогоны отвечали на русское задание.
+            name += f", задание {a['prompt_lang'].upper()}"
+            desc += ("; задание на языке " + a["prompt_lang"].upper()
+                     + ", напрямую с русским треком не сравнивается")
         a["label"], a["desc"] = name, desc
 
     # Regulation Gap считается относительно того же оппонента, что в отчёте,
     # и только для полных строк: разность средних по разным наборам задач --
     # не разрыв с регламентом, а бессмыслица.
-    reg = agents.get("regulation", {}).get("score_mean")
+    reg = agents.get("policy|ru|regulation", {}).get("score_mean")
     for a in agents.values():
         a["reg_gap"] = (round(a["score_mean"] - reg, 1)
                         if (reg is not None and a["score_mean"] is not None
@@ -254,9 +299,18 @@ def build(base_globs=BASE_GLOBS, llm_globs=LLM_GLOBS, ponr_globs=PONR_GLOBS):
             "prompt_lang": "ru",
             "token_accounting": "output_tokens",
         },
+        # Обоснованность аварийного останова по сценариям. Прогон человека
+        # считается в браузере той же bench_score_run, а ей нужен этот
+        # признак; выводится он из опорных политик, поэтому приходит отсюда,
+        # а не назначается в интерфейсе.
+        "esd_just": {sid: bool(just.get(sid, False))
+                     for sid in sorted({s["sid"] for s in scenarios})},
+        "esd_just_why": {sid: just_why.get(sid, "")
+                         for sid in sorted({s["sid"] for s in scenarios})},
         "scenarios": sorted(scenarios, key=lambda s: s["sid"]),
         "agents": sorted(agents.values(),
-                         key=lambda a: (a["kind"] != "model",
+                         key=lambda a: (a["kind"] == "user",
+                                        a["kind"] != "model",
                                         -(a["score_mean"] or 0))),
         "runs": sorted(runs, key=lambda r: (r["scenario"], r["agent"])),
     }
@@ -301,8 +355,9 @@ def selftest(manifest) -> int:
     for rid, steps in light_traces(manifest).items():
         row = rows[rid]
         tp = None
-        for src in _load_rows(LLM_GLOBS):
-            if _run_id(src) == rid:
+        for src in (_load_rows(LLM_GLOBS, "llm")
+                    + _load_rows(USER_GLOBS, "user")):  # noqa: E501
+            if _run_key(src) == rid:
                 tp = src.get("t_per_step")
                 break
         if not tp:

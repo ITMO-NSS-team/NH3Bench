@@ -78,6 +78,9 @@ def main():
     # Пробные прогоны не должны смешиваться с опубликованными протоколами:
     # tests/replay_llm.py собирает их по маске и дописал бы пробу в матрицу.
     ap.add_argument("--trace-dir", default=TRACE_DIR)
+    # Канонический язык задания -- русский: на него отвечали опубликованные
+    # прогоны. Английский трек помечается в паспорте и сравнивается отдельно.
+    ap.add_argument("--prompt-lang", default="ru", choices=("ru", "en"))
     args = ap.parse_args()
 
     pol_name = f"llm:{args.model}" + (f":{args.tag}" if args.tag else "")
@@ -113,7 +116,8 @@ def main():
                                   verbose=True,
                                   base_url=args.base_url or None,
                                   temperature=args.temperature,
-                                  max_tokens=args.max_tokens)
+                                  max_tokens=args.max_tokens,
+                                  prompt_lang=args.prompt_lang)
                 r = ep.run(pol)
                 r["policy"] = pol_name
                 seg = ep.plant.segments.get("EV-03")
@@ -139,7 +143,7 @@ def main():
                 # токенов, и способ их учёта -- часть условий испытания.
                 r["llm"].update(provider=args.provider,
                                 token_accounting=accounting_of(pol),
-                                prompt_lang="ru",
+                                prompt_lang=args.prompt_lang,
                                 commit=_commit())
                 r["trace"] = os.path.relpath(trace, ROOT).replace("\\", "/")
             except Exception:

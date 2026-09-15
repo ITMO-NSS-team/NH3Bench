@@ -11,7 +11,7 @@
     py trainer/build_trainer.py \\
        --llm results/llm.jsonl results/llm_myrun.jsonl \\
        --traces results/llm_traces results/llm_myrun_traces \\
-       --out trainer/NH3Ops-с-моей-моделью.html
+       --out trainer/nh3bench-demo-my-model.html
 """
 import argparse, base64, json, os, sys, tempfile
 
@@ -23,7 +23,8 @@ import driver as DRV
 # -------- полезная нагрузка: исходники + таблица свойств --------
 SRC_FILES = ["__init__.py", "props.py", "config.py", "plant.py", "piping.py",
              "dispersion.py", "control.py", "faults.py", "actions.py",
-             "episode.py", "scenarios.py", "_nh3_table.npz"]
+             "episode.py", "scenarios.py", "metrics.py", "prompt_en.py",
+             "_nh3_table.npz"]
 FILES = {}
 for f in SRC_FILES:
     FILES["nh3twin/" + f] = base64.b64encode(
@@ -46,6 +47,8 @@ if len(SNAPS) < len(DRV.SCENARIOS):
 PIX_JS = open(os.path.join(ROOT, "trainer", "pix.js"), encoding="utf-8").read()
 WATCH_JS = open(os.path.join(ROOT, "trainer", "watch.js"),
                 encoding="utf-8").read()
+MINE_JS = open(os.path.join(ROOT, "trainer", "mine.js"),
+               encoding="utf-8").read()
 QUICK_JS = open(os.path.join(ROOT, "trainer", "quick.js"),
                 encoding="utf-8").read()
 I18N_JS_SRC = open(os.path.join(ROOT, "trainer", "i18n.js"),
@@ -66,6 +69,8 @@ _ap.add_argument("--llm", nargs="*", default=None,
                  help="файлы с прогонами моделей (по умолчанию results/llm.jsonl)")
 _ap.add_argument("--base", nargs="*", default=None,
                  help="файлы с прогонами эталонных политик")
+_ap.add_argument("--user", nargs="*", default=None,
+                 help="файлы со своими прогонами (по умолчанию results/user/*)")
 _ap.add_argument("--out", default="",
                  help="куда положить собранный HTML")
 _ap.add_argument("--label", default="",
@@ -74,7 +79,8 @@ ARGS = _ap.parse_args()
 
 MANIFEST = DM.build(
     base_globs=ARGS.base or DM.BASE_GLOBS,
-    llm_globs=ARGS.llm or DM.LLM_GLOBS)
+    llm_globs=ARGS.llm or DM.LLM_GLOBS,
+    user_globs=ARGS.user or DM.USER_GLOBS)
 TRACES = DM.light_traces(MANIFEST)
 
 REF = {
@@ -127,7 +133,8 @@ self.onmessage=async ev=>{
     if(m.cmd==='init'){ await init(); }
     else if(m.cmd==='start'){
       const t0=Date.now();
-      const r=run("driver.start("+JSON.stringify(m.sid)+")");
+      const r=run("driver.start("+JSON.stringify(m.sid)+","
+        +(m.esd_just?"True":"False")+")");
       // Чем начата задача -- снимком или полным прогревом. Без этой отметки
       // неработающий снимок выглядит просто как «почему-то долго».
       const how=run("str(driver.SNAP_USED)");
@@ -204,6 +211,7 @@ const REF=@@REF@@;
 const BYID={}; CATALOG.forEach(a=>BYID[a.aid]=a);
 
 // ---------- перевод обозначений ----------
+// --- помощники показа (начало) ---
 const TRMAP=[["CO-01","КМ1"],["CO-02","КМ2"],["CO-03","КМ3"],["CO-04","КМ4"],
  ["CD-01","КД1"],["CD-02","КД2"],["VE-LP","ЦР-НД"],["VE-IP","ЦР-СД"],
  ["VE-HP","РЛ"],["EV-01","ВО-1"],["EV-02","ВО-2"],["EV-03","ВО-3"],
@@ -262,6 +270,7 @@ function mg(ppm){ return (ppm*0.71); }
 function hhmmss(s){ s=Math.max(0,Math.round(s));
   return String(Math.floor(s/3600)).padStart(2,"0")+":"+
          String(Math.floor(s/60)%60).padStart(2,"0")+":"+String(s%60).padStart(2,"0"); }
+// --- помощники показа (конец) ---
 const $=q=>document.querySelector(q);
 
 // ---------- состояние ----------
@@ -314,6 +323,8 @@ function handle(m){
     // В режиме просмотра следующий шаг подаёт запись, а не пользователь.
     // m.tick -- промежуточное продвижение времени, пока программа думает.
     if(mode==="watch") watchOnObs(!!m.tick);
+    // Доигрывание: следующая порция времени запрашивается сразу.
+    else if(mode==="play"&&FF) ffStep();
     // В быстрой пробе m.last -- ответ установки на выбранную команду;
     // без него это промотка времени между развилками.
     else if(mode==="quick"){ if(m.last) quickResult(m.last);
@@ -323,7 +334,8 @@ function handle(m){
     // зритель должен увидеть сам момент, а итог открыть по кнопке.
     lockUI(false);
     if(mode==="watch") watchEnded(m.t);
-    else if(mode==="quick") quickEnded(m.t); }
+    else if(mode==="quick") quickEnded(m.t);
+    else if(FF) ffDone(); }
   else if(m.type==='final'){
     if(mode==="watch" && !WM.forceFinal){ lockUI(false); watchFinalReady(m.data); }
     else if(mode==="quick"){ lockUI(false); quickFinalData(m.data); }
@@ -341,6 +353,20 @@ function handle(m){
 function showScreen(id){
   for(const s of ["load","hub","wpick","cmp","menu","brief","play","final"])
     $("#scr-"+s).style.display=(s===id)?"":"none";
+  // Окна поверх экрана закрываются вместе с ним: иначе сравнение решений
+  // или история показателя остаются висеть над главным меню.
+  for(const d of ["diffdlg","histdlg","rawdlg","inspdlg"]){
+    const el=document.getElementById(d);
+    if(el) el.style.display="none";
+  }
+  // Кнопки задачи в шапке имеют смысл только на экране задачи.
+  const inTask=(id==="play");
+  for(const b of ["rawb","finishb","leaveb"]){
+    const el=document.getElementById(b);
+    if(el) el.style.display=inTask?"":"none";
+  }
+  const cb=document.querySelector("header .clockbox");
+  if(cb) cb.style.visibility=inTask?"visible":"hidden";
 }
 function showMenu(){
   // Экран вводной общий для игры и просмотра -- возвращаем его человеку.
@@ -355,6 +381,16 @@ function showMenu(){
     d.onclick=()=>{ sid=s.sid; showBrief(s); };
     box.appendChild(d);
   });
+  // Быстрая проба -- та же первая задача, только короче, поэтому она
+  // стоит здесь же, а не отдельным пунктом главного меню.
+  if(typeof showQuickBrief==="function"){
+    const q=document.createElement("button");
+    q.className="scbtn";
+    q.innerHTML="<b>"+L("demo")+"</b> — "+L("hubDemoNote")+
+      "<span>"+L("mineQuick")+"</span>";
+    q.onclick=()=>showQuickBrief();
+    box.appendChild(q);
+  }
   showScreen("menu");
 }
 function showBrief(s){
@@ -367,13 +403,19 @@ function showBrief(s){
   showScreen("brief");
 }
 function acceptShift(){
+  FF=false; $("#playoutb").disabled=false;
   hist={t:[],k:{}}; usedPause=false; pausedAccum=0; pausedAt=null;
   $("#log").innerHTML=""; expertNote="";
   $("#acceptb").disabled=true;
   $("#warmwrap").style.display="block";
   $("#warmbar").style.width="0%";
-  post({cmd:'start', sid:sid});
+  post({cmd:'start', sid:sid, esd_just:esdJust(sid)});
 }
+
+// Обоснован ли аварийный останов в этой задаче. Это величина сценария,
+// выведенная из опорных политик; берём её из манифеста, чтобы балл человека
+// считался той же формулой, что и опубликованные клетки.
+function esdJust(sid){ return !!((MANIFEST.esd_just||{})[sid]); }
 
 // ---------- часы раздумий ----------
 function resetThink(){ thinkStart=performance.now(); pausedAccum=0;
@@ -394,7 +436,74 @@ setInterval(()=>{
     Math.round(thinkSim())+" "+L("unitS");
   const left=obs.horizon-(obs.t+thinkSim());
   $("#horiz").textContent=L("untilEnd")+" "+hhmmss(left);
+  playbar(obs.t+thinkSim(), obs.horizon);
 },250);
+
+// Полоска прохождения. Последняя четверть окрашивается: время кончается.
+function playbar(t, horizon){
+  const el=$("#playbar"), fill=$("#playbarfill");
+  if(!el||!fill||!horizon) return;
+  const f=Math.max(0,Math.min(1,t/horizon));
+  fill.style.width=(f*100).toFixed(2)+"%";
+  el.classList.toggle("warn", f>0.75);
+}
+// ---------- доигрывание до конца ----------
+//
+// Для демонстрации ждать двадцать минут незачем. Время прокручивается
+// теми же вызовами двойника, что и обычное наблюдение, поэтому физика
+// та же; раздумья не начисляются, и это честно: человек в это время
+// ничего не решает. По сути -- «дальше не вмешиваюсь».
+let FF=false;
+
+function playOut(){
+  if(!obs||FF||mode!=="play") return;
+  if(!confirm(L("playOutAsk"))) return;
+  FF=true;
+  $("#playoutb").disabled=true;
+  // Пока время прокручивается, команды не принимаются -- и об этом
+  // сказано на заслонке. Шапку она не перекрывает, выйти можно.
+  lockUI(true);
+  $("#busytxt").textContent=L("playOutBusy");
+  ffStep();
+}
+
+function ffStep(){
+  if(!FF) return;
+  const left=obs.horizon-obs.t;
+  if(left<=0.5){ ffDone(); return; }
+  post({cmd:'tick', seconds:Math.min(left,600), coarse:true});
+}
+
+function ffDone(){
+  FF=false;
+  $("#playoutb").disabled=false;
+  lockUI(true);
+  post({cmd:'final'});
+}
+
+// Выход из задачи. Прогон при этом не засчитывается: незаконченная
+// задача -- не результат, и в таблицу она не попадает.
+function leaveTask(){
+  const started=!!obs;
+  const over=(mode==="quick" && QM && QM.phase==="over");
+  if(started && !over && !confirm(L("leaveAsk"))) return;
+  if(mode==="watch"){
+    if(typeof watchLeave==="function") watchLeave();
+    showWatchPick();
+    return;
+  }
+  if(mode==="quick"){
+    if(typeof quickLeave==="function") quickLeave();
+    showMenu();
+    return;
+  }
+  FF=false;
+  $("#playoutb").disabled=false;
+  lockUI(false);
+  if(pausedAt!==null) togglePause();
+  showMenu();
+}
+
 function togglePause(){
   if(pausedAt===null){ pausedAt=performance.now(); usedPause=true;
     post({cmd:'paused'}); $("#pauseb").textContent=L("resumeBtn");
@@ -694,6 +803,20 @@ function showFinal(f){
       " "+L("unitS")+"</td><td>"+plantReply(r.result)+"</td></tr>").join("");
   $("#fev").innerHTML=f.events.map(e=>"<div>["+hhmmss(e[0])+"] "+plantReply(e[1])+
     "</div>").join("");
+  // Балл пришёл из двойника, где его посчитала та же metrics.bench_score_run,
+  // которой посчитаны опубликованные клетки. Здесь его только показываем.
+  const fm=$("#fmine");
+  if(fm){
+    let mh="";
+    if(f.score!==null&&f.score!==undefined){
+      mh+="<div class='fscore'>"+L("score")+": <b>"+f.score+"</b> / 100"+
+        (f.forced?" <span class='mut'>("+L("mineStoppedNote")+")</span>":"")+
+        "</div>";
+    }
+    if(typeof mineAddHTML==="function") mh+=mineAddHTML("human");
+    fm.innerHTML=mh;
+    if(typeof mineBind==="function") mineBind(f,"human");
+  }
   showScreen("final");
 }
 function download(){
@@ -713,8 +836,14 @@ function download(){
 window.addEventListener("load",()=>{
   boot();
   $("#pauseb").onclick=togglePause;
+  $("#leaveb").onclick=leaveTask;
+  $("#playoutb").onclick=playOut;
   $("#finishb").onclick=()=>{ lockUI(true); post({cmd:'final'}); };
-  $("#rawb").onclick=()=>{ $("#rawtxt").textContent=obs?obs.raw:"";
+  // Сырой текст щита -- это промпт испытуемой программы. В английском
+  // интерфейсе показываем его английский вид: он собран тем же
+  // переводчиком, которым сделан англоязычный трек задания.
+  $("#rawb").onclick=()=>{ $("#rawtxt").textContent=
+    !obs?"":((LANG==="en"&&obs.raw_en)?obs.raw_en:obs.raw);
     $("#rawdlg").style.display=""; };
   $("#rawclose").onclick=()=>$("#rawdlg").style.display="none";
   $("#histb").onclick=()=>openHist(null);
@@ -724,6 +853,7 @@ window.addEventListener("load",()=>{
   $("#againb").onclick=()=>showBrief(SCEN.find(s=>s.sid===sid));
   $("#menub").onclick=()=>{ mode="play"; applyMode(); showHub(); };
   $("#inspclose").onclick=()=>$("#inspdlg").style.display="none";
+  $("#diffclose").onclick=()=>$("#diffdlg").style.display="none";
   document.querySelectorAll(".hubback").forEach(el=>{ el.onclick=showHub; });
   $("#langb").onclick=()=>setLang(LANG==="en"?"ru":"en");
   initLang();
@@ -782,6 +912,54 @@ button.on{background:var(--line);color:#1c1f21;font-weight:600}
 .wtab td.mean{font-weight:600;border-left:1px solid var(--dim)}
 .wtab td.gap{color:var(--mut)}
 .wtab .wm{color:var(--line);margin-left:4px;font-size:11px}
+.wtab tr.minehead td,.wtab tr.userhead td{padding-top:14px;border-bottom:1px solid var(--dim);
+ text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.08em}
+.wtab tr.mine td.nm{white-space:nowrap}
+.wtab tr.qrow td{opacity:.85}
+.wtab .mbadge{font-size:10px;text-transform:uppercase;letter-spacing:.06em;
+ border:1px solid var(--dim);border-radius:3px;padding:1px 4px;
+ color:var(--mut);margin-right:6px}
+.wtab .mdel{background:none;border:none;color:var(--mut);cursor:pointer;
+ font-size:14px;line-height:1;padding:0 2px;margin-left:8px}
+.wtab .mdel:hover{color:var(--bad)}
+.wtab td i{font-style:normal;color:var(--mut);margin-left:3px;font-size:11px}
+button.lnk{background:none;border:none;color:var(--line);cursor:pointer;
+ font:inherit;text-decoration:underline;padding:0}
+.diffpick{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 10px}
+.diffpick select{background:var(--p2);color:var(--tx);
+ border:1px solid var(--dim);padding:5px 7px;font:inherit;font-size:13px}
+.diffsum{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:6px}
+.diffsum div{background:var(--p2);padding:6px 8px;font-size:13px}
+.dtab{border-collapse:collapse;width:100%;font-size:13px;margin-top:8px}
+.dtab th{font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;
+ color:var(--mut);text-align:left;padding:4px 6px;
+ border-bottom:1px solid var(--dim)}
+.dtab td{padding:3px 6px;border-bottom:1px solid var(--p2);vertical-align:top}
+.dtab td.tm{font-family:"IBM Plex Mono",monospace;color:var(--mut);
+ white-space:nowrap;width:1%}
+.dtab tr.eq td{color:var(--mut)}
+.dtab tr.onlya td:nth-child(2),.dtab tr.dif td:nth-child(2){background:rgba(217,164,65,.16);color:var(--tx)}
+.dtab tr.onlyb td:nth-child(4),.dtab tr.dif td:nth-child(4){background:rgba(143,196,224,.16);color:var(--tx)}
+.dtab tr.ponrline td{background:rgba(207,90,78,.14);color:#f0b5ad;
+ font-size:11.5px;border-top:1px solid var(--bad);
+ border-bottom:1px solid var(--bad);text-transform:uppercase;
+ letter-spacing:.06em;padding:4px 6px}
+.dtab tr.endrow td{border-top:1px solid var(--dim);padding-top:6px}
+.dtab .tk{font-family:"IBM Plex Mono",monospace;font-size:11px;
+ color:var(--mut);margin-left:8px}
+#playbar{display:none;height:5px;background:var(--p2);
+ border-bottom:1px solid var(--dim)}
+/* Видимостью полоски управляет applyMode: он ставит display:block. */
+#playbar i{display:block;height:100%;width:0;background:var(--line);
+ transition:width .25s linear}
+#playbar.warn i{background:var(--warn)}
+.fscore{font-size:15px;margin-bottom:8px}
+.mineadd{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.mineadd .lbl{font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;
+ color:var(--mut)}
+.mineadd input{width:200px;padding:5px 7px;background:var(--p2);
+ border:1px solid var(--dim);color:var(--tx);font:inherit;border-radius:3px}
+.mineadd .mut{flex-basis:100%;font-size:12px}
 .wcell{width:100%;padding:3px 6px;font-family:"IBM Plex Mono",monospace}
 .wcell.ok{border-color:var(--ok)} .wcell.maj{border-color:var(--warn)}
 .wcell.cat{border-color:var(--bad)}
@@ -849,7 +1027,7 @@ button.on{background:var(--line);color:#1c1f21;font-weight:600}
 #watchctl button{padding:4px 9px;font-size:12.5px}
 #watchctl .sep{width:1px;height:20px;background:var(--dim);margin:0 4px}
 /* линия решений: положение -- время, толщина -- цена размышления */
-#timeline{margin-top:12px}
+#timeline{margin-top:24px}   /* место под подпись точки невозврата */
 .tl{position:relative;height:26px;background:var(--p2);
  border:1px solid var(--dim)}
 .tl i{position:absolute;top:0;height:100%;background:var(--line);
@@ -873,6 +1051,10 @@ button.on{background:var(--line);color:#1c1f21;font-weight:600}
 .tl i.now.drag::after{border-bottom-color:var(--warn)}
 .tl i.thinkspan{background:var(--warn);opacity:.3;z-index:1;
  pointer-events:none}
+.tl .ponrlab{position:absolute;top:-15px;transform:translateX(-50%);
+ font-size:9.5px;text-transform:uppercase;letter-spacing:.08em;
+ color:var(--bad);white-space:nowrap;pointer-events:none}
+.tlleg{color:var(--dim);font-size:11px;line-height:1.5;margin-top:4px}
 .tlax{display:flex;justify-content:space-between;color:var(--mut);
  font-size:11px;font-family:"IBM Plex Mono",monospace;margin-top:11px}
 .tlax .nowt{color:var(--tx)}
@@ -932,8 +1114,11 @@ button.on{background:var(--line);color:#1c1f21;font-weight:600}
 #thinkv{color:var(--warn)} #horiz{color:var(--mut);font-size:12px}
 #warmwrap{display:none;padding:8px 14px}
 #warmbar{height:6px;background:var(--line);width:0%}
-#busy{display:none;position:fixed;inset:0;background:rgba(20,22,24,.55);
- z-index:9;display:none}
+/* Заслонка не накрывает шапку: выйти из задачи можно и пока исполняется
+   команда -- иначе кнопка «к задачам» оказывалась некликабельной. */
+#busy{display:none;position:fixed;left:0;right:0;bottom:0;top:52px;
+ background:rgba(20,22,24,.55);z-index:9}
+header{position:relative;z-index:11}
 #busy div{position:absolute;top:40%;left:50%;transform:translate(-50%,-50%);
  background:var(--panel);border:1px solid var(--line);padding:16px 26px}
 #rawdlg{position:fixed;inset:0;background:rgba(20,22,24,.8);z-index:10}
@@ -969,9 +1154,10 @@ HTML = r"""<!DOCTYPE html>
 <style>@@CSS@@</style></head>
 <body>
 <header>
-  <h1><span data-i18n="hdr.title">NH3Ops · тренажёр</span> <span data-i18n="hdr.sub">— та же установка и те же задачи, что у испытуемых программ</span></h1>
+  <h1><span data-i18n="hdr.title">NH3Bench · интерактивный бенчмарк</span> <span data-i18n="hdr.sub">— та же установка, те же часы, тот же набор команд</span></h1>
   <button id="langb" title="Язык интерфейса / Interface language">EN</button>
   <button id="rawb" data-i18n="hdr.raw" data-i18n-title="hdr.rawt" title="Показать наблюдение в том виде, в каком его читает программа">сырой текст щита</button>
+  <button id="leaveb" data-i18n="hdr.leave">← к задачам</button>
   <button id="finishb" data-i18n="hdr.finish">завершить задачу</button>
   <div class="clockbox">
     <div id="clock" class="num">00:00:00</div>
@@ -979,6 +1165,10 @@ HTML = r"""<!DOCTYPE html>
     <div id="horiz"></div>
   </div>
 </header>
+
+<!-- Полоска прохождения задачи: прошло / осталось. Только для человека,
+     в просмотре записи своя полоса решений. -->
+<div id="playbar"><i id="playbarfill"></i></div>
 
 <div id="scr-load" class="wrap">
   <h2 data-i18n="load.h">Подготовка тренажёра</h2>
@@ -1087,6 +1277,7 @@ HTML = r"""<!DOCTYPE html>
         padding:6px 8px;font-family:inherit">
         <div style="margin:8px 0">
           <button id="pauseb" data-i18n="play.pause">ПАУЗА (для разбора)</button>
+          <button id="playoutb" data-i18n="play.playout">доиграть без вмешательства</button>
         </div>
         <div style="margin:6px 0"><span data-i18n="play.observe">Наблюдать:</span>
           <button class="wb" data-w="10" data-i18n="play.w10">10 с</button>
@@ -1114,6 +1305,8 @@ HTML = r"""<!DOCTYPE html>
   </div>
   <div class="card" style="margin-top:10px"><h2 data-i18n="fin.acts">Ваши команды</h2>
     <div class="bd"><table id="facts"></table></div></div>
+  <div class="card" style="margin-top:10px"><h2><span data-i18n="fin.mine">Ваш результат</span></h2>
+    <div id="fmine"></div></div>
   <div class="card" style="margin-top:10px"><h2 data-i18n="fin.note">Замечание эксперта к задаче</h2>
     <div class="bd">
       <textarea id="fnote" data-i18n-ph="fin.noteph" placeholder="что показалось недостоверным, чего не хватило, как действовали бы вы…"></textarea>
@@ -1141,6 +1334,9 @@ HTML = r"""<!DOCTYPE html>
   <button id="rawclose" data-i18n="raw.close" style="float:right">закрыть</button>
   <h3 data-i18n="raw.h">Наблюдение, как его читает испытуемая программа</h3>
   <div id="rawtxt"></div></div></div>
+<div id="diffdlg" style="display:none"><div class="in">
+  <button id="diffclose" data-i18n="raw.close" style="float:right">закрыть</button>
+  <div id="difftxt"></div></div></div>
 <div id="inspdlg" style="display:none"><div class="in">
   <button id="inspclose" data-i18n="raw.close" style="float:right">закрыть</button>
   <div id="insptxt"></div></div></div>
@@ -1150,20 +1346,26 @@ HTML = r"""<!DOCTYPE html>
 </body></html>"""
 
 worker = WORKER_JS.replace("@@FILES@@", json.dumps(FILES))
-main = ((MAIN_JS + "\n" + PIX_JS + "\n" + WATCH_JS + "\n" + QUICK_JS
-         + "\n" + I18N_JS_SRC)
+# Данные прогонов -- отдельным объявлением перед бандлом. Так trainer/*.js
+# остаются разбираемым JavaScript: метка внутри выражения делала watch.js
+# синтаксически неверным, и редактор ругался на весь файл.
+DATA_JS = (
+    "const NH3_MANIFEST = "
+    + json.dumps(dict(MANIFEST, label=ARGS.label), ensure_ascii=False)
+    + ";\nconst NH3_TRACES = "
+    + json.dumps(TRACES, ensure_ascii=False) + ";\n")
+
+main = ((DATA_JS + MAIN_JS + "\n" + PIX_JS + "\n" + WATCH_JS + "\n"
+         + QUICK_JS + "\n" + MINE_JS + "\n" + I18N_JS_SRC)
         .replace("@@CATALOG@@", CATALOG)
         .replace("@@SCEN@@", SCENARIOS)
-        .replace("@@REF@@", json.dumps(REF, ensure_ascii=False))
-        .replace("@@MANIFEST@@", json.dumps(
-            dict(MANIFEST, label=ARGS.label), ensure_ascii=False))
-        .replace("@@TRACES@@", json.dumps(TRACES, ensure_ascii=False)))
+        .replace("@@REF@@", json.dumps(REF, ensure_ascii=False)))
 html = (HTML.replace("@@CSS@@", CSS)
         .replace("@@WORKER@@", worker)
         .replace("@@MAIN@@", main))
 
 path = (os.path.abspath(ARGS.out) if ARGS.out
-        else os.path.join(ROOT, "trainer", "NH3Ops-тренажёр-эксперта.html"))
+        else os.path.join(ROOT, "trainer", "nh3bench-demo.html"))
 open(path, "w", encoding="utf-8").write(html)
 tmp = tempfile.gettempdir()
 open(os.path.join(tmp, "worker_check.js"), "w", encoding="utf-8").write(

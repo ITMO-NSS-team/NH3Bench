@@ -55,6 +55,7 @@ nh3twin/            the digital twin + agent layer (import root)
   episode.py        observation building + episode loop with token clock
   policies.py       null / random / rules / regulation / oracle / esd
   llm_policy.py     LLM adapter: prompt assembly, action parsing, token accounting; ReplayPolicy
+  prompt_en.py      the English task track: role, catalog, observation, plant replies
   metrics.py        the §11 metric set: trace metrics, aggregates, PONR-based timing
   scenarios.py      the six benchmark scenarios (v2 + S6)
   runner.py         plain simulation runs without an agent
@@ -63,7 +64,8 @@ benchmark.py        user-facing CLI: run / replay / report / validate / list-*
 tests/              run_baselines.py (calibration matrix), run_regimes.py (regime sanity),
                     run_llm.py (LLM episodes), replay_llm.py (re-derive from traces),
                     report_metrics.py (the §11 table), report_llm.py (older compact report),
-                    calibrate_ponr.py, validate_props.py / _shock.py / _robustness.py
+                    calibrate_ponr.py, validate_props.py / _shock.py / _robustness.py,
+                    validate_prompt_en.py (the English track: nothing left in Russian)
 results/           baselines.jsonl + base_S6.jsonl (current matrix), baselines_v1.jsonl,
                     llm.jsonl + llm_traces/ (agent runs, per-decision transcripts),
                     ponr.json + ponr_S6.json, validation/, *_isoK_archive.* (pre-v2.1)
@@ -71,6 +73,8 @@ viz/                HMI visualization + the expert-facing Russian document gener
 trainer/            browser trainer and demo, one self-contained HTML:
                     driver.py (Pyodide session), pix.js (pixel-art plant),
                     watch.js (replay of recorded runs + Compare), quick.js (quick try),
+                    mine.js (the visitor's own runs in the results table),
+                    diff (inside watch.js): LCS alignment of two runs' commands,
                     i18n.js (EN/RU), demo_manifest.py (what runs exist),
                     make_snapshots.py (task start states), build_trainer.py
 paper/              built AAAI-27 demo paper; LaTeX source is a separate repository
@@ -116,6 +120,11 @@ python3 tests/run_llm.py --scenarios S1 --model haiku --out results/llm_S1.jsonl
 python benchmark.py run --provider openrouter --model <slug> --scenarios S1
 python benchmark.py validate          # simulator sanity; --run also plays S1
 python benchmark.py report            # compact table; --full for every metric
+
+# English task track. The Russian task stays the default and the canonical one.
+python benchmark.py run --provider openrouter --model <slug> --prompt-lang en \
+       --out results/user/openrouter_en.jsonl --trace-dir results/user/traces_en
+python tests/validate_prompt_en.py     # ~4 min: seven warm-ups
 
 # Metrics (docs/METRICS.md). PONR calibration is slow (~10 min/scenario) but cached.
 python3 tests/calibrate_ponr.py --scenarios S1 --out results/ponr_S1.json
@@ -185,6 +194,52 @@ is recorded in `docs/DECISIONS.md`.
   the snapshot then fails to load, the driver falls back to a warm-up, and the only
   symptom is "somehow slow". `make_snapshots.py` writes arrays as lists and the generator
   as its state, and `--check` refuses a snapshot holding version-specific references.
+- **The language of the task is part of a run's identity.** `prompt_lang` goes into the
+  de-duplication key, the run id and the agents map, so the Russian and English tracks of
+  one model are two rows, labelled as such — never one row averaging both. Whether the
+  language also changes the token cost is a question for measurement, not assumption: the
+  clock counts output tokens, and on S1 gemini-3.7-flash spent 231.2 tokens per decision
+  in Russian against 231.4 in English, with the same outcome at the same second.
+- **The English track translates on the way out; the simulator is not rewritten.**
+  `prompt_en.py` takes the observation that `episode.py` rendered and translates it line
+  by line, so the layout has exactly one definition. `prompt_en.check()` walks the role,
+  the whole catalog, the briefs and every reply template the simulator can emit (found by
+  parsing its sources) and requires that no Cyrillic survives — an untranslated fragment
+  would otherwise reach the model in silence.
+- **Adding the track must not change the Russian prompt by a byte.**
+  `system_prompt()` and `user_prompt()` default to `lang="ru"`;
+  `tests/validate_prompt_en.py` compares both against the pre-demo revision. The 24
+  published runs answered the Russian task and have to stay reproducible.
+- **Three categories of run, and they never merge.** The published matrix
+  (`results/llm.jsonl` + `results/baselines*.jsonl`, 24 watchable runs in the old format)
+  is frozen; runs the repo owner measures afterwards live in `results/user/` and come out
+  as `kind:"user"`; the visitor's own play sessions live in their browser (`mine.js`).
+  `demo_manifest` tags rows with their source, the de-duplication key includes it, and the
+  agents map is keyed by `(kind, id)` — otherwise re-measuring a published model under the
+  same slug would silently overwrite its published row.
+- **`results/user/` is not on `replay_llm.py`'s path, and must not be.** The published
+  matrix is re-derived by globbing `results/llm_traces/`; a user run landing there would
+  be appended to the publication. `benchmark.py run --out results/user/... --trace-dir
+  results/user/traces` keeps them apart.
+- **A human run is scored by the same function as a model run.** The browser does not
+  compute a score of its own: `driver.Session._score` builds the row with
+  `Episode.result` and calls `metrics.bench_score_run` — the same path that produced the
+  cells in `results/`. Verified against the published matrix: inaction on S1 gives 0
+  (CAT-3 at 614 s), the oracle path on S1 gives 100, inaction on S3 80.3 and on S5 100,
+  and an immediate ESD gives 57.1 on S3 and 94.8 on S2, all to the published decimal. Any
+  formula written in JS would silently make the leaderboard incomparable.
+- **`bench_score_run` needs `esd_justified`, and it is a property of the scenario.** It is
+  derived from the π_null and π_esd runs (`report_metrics.esd_justification`), so it cannot
+  be recomputed in the browser — `demo_manifest` publishes it as `esd_just`, the page
+  passes it into `{cmd:'start'}`, and the session keeps it for every `final()`. Get it
+  wrong and an emergency stop is charged (or not) against the wrong baseline.
+- **A quick-try result is never a benchmark result, and a hand-stopped task is not a
+  completed one.** Both are stored (`kind:"quick"`, `forced:true`), both are shown with a
+  mark, and neither enters a mean or a Regulation Gap — `mine.js` sets `scored:false`.
+- **The visitor's runs live in their browser and nowhere else.** `localStorage`, deletable
+  per experiment and in bulk, never sent anywhere, and labelled as such on the table
+  itself: an experiment run on a conference stand must not look like part of the
+  published set.
 - **A row measured on part of the scenarios is marked, and gets no Regulation Gap.** A
   mean over two tasks is not comparable with a mean over six, and a difference of such
   means is not a gap. Enforced in `demo_manifest` (`complete`, `n_scored`).
@@ -194,6 +249,17 @@ is recorded in `docs/DECISIONS.md`.
 - **Test runs must not write into `results/llm_traces/`.** `replay_llm.py` collects that
   directory by mask, so a trial run would be appended to the published matrix as a
   full-fledged row. Use `--trace-dir` (`benchmark.py` derives it from `--out`).
+- **Two runs are compared by aligning their command sequences, not their clocks.**
+  `diffAlign` is an LCS over action ids: the same command issued a minute later is a match
+  with a time shift, not a divergence. `diffPairBlocks` then pairs the two sides inside a
+  divergence block so time rises down each column — without it the reader sees A's ninth
+  minute next to B's first. Both are checked against an independently computed LCS length.
+- **`[рассуждение]` / `[ответ]` are our markers, not the model's words.** `providers.py`
+  adds them when a provider returns hidden reasoning separately, so `replyMarks` may
+  translate them — while the model's own text stays verbatim, as the invariant above
+  requires. `replyExcerpt` also skips leading markers and headings: for a model with a
+  separate reasoning field the first line *is* the marker, and a summary made of it says
+  nothing.
 - **The plant's replies are translated on the way out, never in the simulator**
   (`i18n.js` `plantReply`, 117 rules). If no rule matches, the Russian original is shown:
   an incomplete translation is better than an invented one. A rule must consume the whole
@@ -307,6 +373,15 @@ in `policies.OraclePolicy.PLAYBOOK` and calibrate with all four policies. A scen
 not admitted until π_null fails, π_oracle passes clean, and π_reg either fails or pays
 ≥3× the oracle's cost.
 
+### Adding a run of your own to the demo
+```bash
+python benchmark.py run --provider openrouter --model <slug> --scenarios S1 \
+       --out results/user/openrouter.jsonl --trace-dir results/user/traces
+python trainer/build_trainer.py
+```
+It appears in the demo as its own category — watchable like any published run, marked in
+the results table, and excluded from the published matrix. `--user` overrides the glob.
+
 ### Measuring a new model
 `benchmark.py run` wraps `tests/run_llm.py`; the provider layer is `nh3twin/providers.py`
 and `llm_policy.py` is deliberately untouched (`OpenRouterPolicy` inherits `act`, the
@@ -361,6 +436,12 @@ will silently send every task start back to a full warm-up.
   built-in self-test (S1 with no intervention must give CAT-3 at ~614 s) is still the way
   to check it, and it now also reports whether the task started from a snapshot or a
   warm-up.
+- **A browser-shim check must make `window` the global object, or half the page is
+  untested.** `pix.js` asks for a frame through the bare `requestAnimationFrame`; a page
+  that overrides it by assigning to `window.requestAnimationFrame` works in a browser
+  (where `window` *is* the global object) but not under a shim where `window` is an
+  ordinary object — the frame is then never drawn and the check silently sees an empty
+  map. Override it with a function declaration instead, which works in both.
 - **No `node` in this dev environment, but the trainer JS can still be *run*.** Syntax:
   the `esprima` pip package (`py -m pip install esprima`, then parse the scripts out of
   the built HTML). Behaviour: the `quickjs` pip package executes the whole bundle under a
@@ -377,11 +458,44 @@ will silently send every task start back to a full warm-up.
   `key: L("key")` — infinite recursion that hangs the page on load; and replacing a
   fragment that ends mid-string swallows a quote. Split the file at the end of the
   dictionary before substituting, and parse afterwards.
+- **The tail of a translation rule is where Russian hides.** `Аварийный останов: (.*)`
+  passed its reason through unchanged, so an emergency stop read
+  "Emergency shutdown: команда агента". Reasons that arrive in Latin
+  (`NH3_HIHI_MACHINEROOM`) are meant to pass through; a Russian one needs its own rule.
+  `prompt_en.check()` now also follows `trigger_esd(...)`, which was the one way such a
+  string reached the screen without going through a `return`, `append`, `log` or
+  `raise_alarm`.
+- **`style.display = ""` means "whatever the stylesheet says", which for a hidden
+  element means still hidden.** The play-mode progress strip is `display:none` in the
+  CSS, so `applyMode` has to set `display:block`, not `""` — the strip was in the page,
+  correct, and invisible.
+- **Fast-forward for the human is "no further action", not a speed-up.** `playOut()`
+  advances with the same `{cmd:'tick'}` chunks the quick try uses, charges no
+  deliberation (the person is not deciding), and locks the catalog while time runs — so
+  the outcome is exactly what the twin computes for doing nothing until the horizon, and
+  the run stays scorable and honest. The thinking scale (×1/×2/×4 on the briefing) is the
+  only thing that changes the rate at which a human's wall clock becomes plant time.
+- **The raw panel text is the tested program's prompt, so it follows the task language,
+  not the interface.** For the published Russian runs it is Russian; in the English
+  interface the trainer shows the English rendering built by the very same `prompt_en`
+  used for the English task track (`driver` returns it as `raw_en`), so a person playing
+  in English sees exactly what a model on the English track read.
+- **Every screen a person can get stuck on needs a way out, and the busy overlay must
+  not cover it.** The quick try had none: its navigation appeared only on the result
+  screen, so an abandoned try could only be escaped by reloading. The way out now lives
+  in the header (`#leaveb`), works in all three modes, and the `#busy` overlay starts
+  below the header instead of covering it — otherwise the button is there but unclickable
+  while a command executes.
 - **`data-i18n` goes on the element that holds the text and nothing else.** Put it on a
   container and `textContent` wipes out the child elements along with their handlers —
   which is how the "history" button disappeared. `applyLang` now skips elements that have
   children, so a mis-placed key leaves the label untranslated instead of breaking the
   screen, but the marker still belongs on a leaf (wrap the text in a `<span>`).
+- **A shim that does not parse the markup cannot check a label that lives in the
+  markup.** Russian labels sit in the HTML and English ones are substituted on top, so
+  under the quickjs shim a `data-i18n` element reads as empty in Russian — that is the
+  harness, not a bug. Label coverage is checked by parsing the built HTML
+  (`markup.py`-style), behaviour by executing it; do not mix the two.
 - **Don't substitute a long instrument name where a short panel label was.** The panel
   had its own short captions ("Молоко", "Уровень ЦР-НД"); reusing `TAGMETA.ru`
   ("t молока", "Уровень ЦР-НД (датчик)") silently rewrote the Russian interface. Adding
@@ -405,8 +519,12 @@ See `docs/STATUS.md` for the backlog. Short version of where things stand:
   `L` key, all 133 command names, all six briefings, all 117 reply rules and every screen
   built in code, in both directions.
 
+- The English task track exists (`--prompt-lang en`, `nh3twin/prompt_en.py`) and is
+  measured on one model across all six scenarios (`google/gemini-3.7-flash`: mean 17.8,
+  Regulation Gap −23.2, three catastrophes); it is a second, separately labelled column,
+  not a replacement. `results/user/openrouter_en.jsonl` + `traces_en/`.
+
 Open, in rough priority order: the token-budget frontier (§11.6 — the safety-latency
 trade-off is still supported by a single point per model), the expert validation round,
-three seeds for π_random, and an English prompt track (`--prompt-lang en`) — which would
-be a second, separately labelled column, not a replacement, since the 24 published runs
-answered a Russian task.
+three seeds for π_random, and English-track runs of the four published models (which
+would make the two language columns comparable model by model).

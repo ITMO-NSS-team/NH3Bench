@@ -436,12 +436,13 @@ const PIX = (function(){
     const pts=A.slice();
     pts.push([B[B.length-1][0],SPINE]);
     for(let i=B.length-1;i>=0;i--) pts.push(B[i]);
-    let L=0, seg=[0];
+    // len, а не L: имя L занято переводом подписей (см. renderLabels).
+    let len=0, seg=[0];
     for(let i=1;i<pts.length;i++){
-      L+=Math.abs(pts[i][0]-pts[i-1][0])+Math.abs(pts[i][1]-pts[i-1][1]);
-      seg.push(L);
+      len+=Math.abs(pts[i][0]-pts[i-1][0])+Math.abs(pts[i][1]-pts[i-1][1]);
+      seg.push(len);
     }
-    return {pts,seg,L:Math.max(L,1)};
+    return {pts,seg,L:Math.max(len,1)};
   }
   function along(r,f){
     const d=f*r.L;
@@ -774,20 +775,25 @@ const PIX = (function(){
       plate(zoneLbl(z), z.x+2, z.y+4.6);
     cx.fillStyle="#98a1a8";
     cx.font='500 '+(S>=3?10:9)+'px "IBM Plex Mono",monospace';
-    const L=(t,x,y,c)=>{ if(c)cx.fillStyle=c; cx.fillText(t,x*S,y*S); };
-    L(mapLbl("КД1"),19,9.4); L(mapLbl("КД2"),97,9.4,"#98a1a8");
-    L(mapLbl("КМ1"),16,59.2); L(mapLbl("КМ2"),60,59.2);
-    L(mapLbl("КМ3"),104,59.2); L(mapLbl("КМ4"),148,59.2);
-    L(mapLbl("РЛ"),17,99); L(mapLbl("ЦРСД"),79,99); L(mapLbl("ЦРНД"),131,99);
+    // Имя txt, а не L: L -- это перевод подписи, и затенять его нельзя.
+    const txt=(t,x,y,c)=>{ if(c)cx.fillStyle=c; cx.fillText(t,x*S,y*S); };
+    txt(mapLbl("КД1"),19,9.4); txt(mapLbl("КД2"),97,9.4,"#98a1a8");
+    txt(mapLbl("КМ1"),16,59.2); txt(mapLbl("КМ2"),60,59.2);
+    txt(mapLbl("КМ3"),104,59.2); txt(mapLbl("КМ4"),148,59.2);
+    txt(mapLbl("РЛ"),17,99); txt(mapLbl("ЦРСД"),79,99);
+    txt(mapLbl("ЦРНД"),131,99);
     const T2=obs.tags||{};
-    L((T2.LEVEL_VE_HP||0).toFixed(0)+"%",34,124,"#8fc4e0");
-    L((T2.LEVEL_VE_IP||0).toFixed(0)+"%",92,124);
-    L((T2.LEVEL_VE_LP||0).toFixed(0)+"%",144,124);
-    L(mapLbl("НА3 НА4"),84,141,"#98a1a8"); L(mapLbl("НА1 НА2"),136,141);
-    L(mapLbl("ВО-1")+" · "+L("ice")+" "+(T2.M_ICE_T!==undefined?T2.M_ICE_T.toFixed(0):"—")+" "+L("unitT"),
+    txt((T2.LEVEL_VE_HP||0).toFixed(0)+"%",34,124,"#8fc4e0");
+    txt((T2.LEVEL_VE_IP||0).toFixed(0)+"%",92,124);
+    txt((T2.LEVEL_VE_LP||0).toFixed(0)+"%",144,124);
+    txt(mapLbl("НА3 НА4"),84,141,"#98a1a8");
+    txt(mapLbl("НА1 НА2"),136,141);
+    txt(mapLbl("ВО-1")+" · "+L("ice")+" "+
+      (T2.M_ICE_T!==undefined?T2.M_ICE_T.toFixed(0):"—")+" "+L("unitT"),
       16,156.5);
-    L(mapLbl("ВО-2"),287,57); L(mapLbl("ВО-3"),218,177); L(mapLbl("ВО-4"),254,177);
-    L(mapLbl("ВО-5"),304,177); L(mapLbl("ВО-6"),340,177);
+    txt(mapLbl("ВО-2"),287,57); txt(mapLbl("ВО-3"),218,177);
+    txt(mapLbl("ВО-4"),254,177);
+    txt(mapLbl("ВО-5"),304,177); txt(mapLbl("ВО-6"),340,177);
     plate(L("milk")+" "+(T2.T_MILK!==undefined?T2.T_MILK.toFixed(1):"—")+" "+L("unitC"),
       322,62.5,(T2.T_MILK||0)>6?"#e8a89b":"#cfe3d5");
     const mr=(T2.NH3_MACHINEROOM_PPM||0)*0.71, hl=(T2.NH3_HALL_PPM||0)*0.71;

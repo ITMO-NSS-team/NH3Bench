@@ -1,12 +1,12 @@
 # Generated artifacts
 
-Four HTML deliverables are produced from this repo. They are build outputs — regenerate
+Three HTML deliverables are produced from this repo. They are build outputs — regenerate
 rather than hand-edit. All are single self-contained files (inline CSS/JS/base64 assets).
 
 | Artifact | Built by | Audience |
 |---|---|---|
-| `NH3Ops-описание-для-эксперта.html` (~750 KB) | `viz/build_expert_doc.py` | plant operator validating realism |
-| `NH3Ops-тренажёр-эксперта.html` (~450 KB) | `trainer/build_trainer.py` | same operator, hands-on |
+| `viz/nh3bench-expert-guide.html` (~750 KB) | `viz/build_expert_doc.py` | plant operator validating realism |
+| `trainer/nh3bench-demo.html` (~2.2 MB) | `trainer/build_trainer.py` | same operator, hands-on |
 | `nh3twin-hmi.html` (~290 KB) | `viz/build_html.py` | internal — ISA-101 mnemonic with trends |
 | `NH3Ops-Bench-design.md` | hand-written | benchmark design, Russian (`docs/DESIGN-original-ru.md`) |
 

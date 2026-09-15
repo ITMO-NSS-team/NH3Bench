@@ -193,7 +193,9 @@ function startQuick() {
   $("#qbox").innerHTML = "<p class='mut'>" + L("waiting") + "</p>";
   $("#busy").style.display = "none";
   QM.pending = true;
-  post({ cmd: "start", sid: "S1" });
+  post({ cmd: "start", sid: "S1",
+         esd_just: (typeof esdJust === "function") ? esdJust("S1")
+                                                   : false });
 }
 
 // Вызывается из handle() на каждом наблюдении, пока идёт проба.
@@ -236,7 +238,6 @@ function quickAsk() {
   h += "<div class='qask'>" + qt(step.ask) + "</div>";
   h += "<div class='qopts'>";
   step.opts.forEach((o, k) => {
-    const a = BYID[o.aid];
     h += "<button class='qopt' data-k='" + k + "'><b>" +
          actText(o.aid) + "</b><span>" + qt(o.hint) + "</span></button>";
   });
@@ -376,14 +377,20 @@ function quickShowResult() {
     h += "<table class='kv'>";
     runs.forEach(x => {
       h += "<tr><td>" + x.agent + "</td><td>" +
-           (x.CAT.length ? L("cat") + " " + x.CAT.join("+")
-                         : (x.MAJ.length ? L("damage") + " " + x.MAJ.join("+")
+           (x.CAT.length ? L("cat") + " " + x.CAT.map(outcomeCode).join("+")
+                         : (x.MAJ.length ? L("damage") + " " +
+                                           x.MAJ.map(outcomeCode).join("+")
                                          : L("clean"))) +
            " · " + L("score") + " " + x.score + "</td></tr>";
     });
     h += "</table>";
   }
   h += "<p class='mut'>" + L("rules") + "</p>";
+  // Результат пробы тоже можно положить в таблицу -- но только пометкой
+  // «демо»: взаимодействие сокращено, и это не результат бенчмарка.
+  if (typeof mineAddHTML === "function" && QM.finalData) {
+    h += mineAddHTML("quick");
+  }
   h += quickHistoryHTML();
   h += "<div class='qnav'>" +
        "<button id='qagain'>" + L("qAgain") + "</button>" +
@@ -391,6 +398,9 @@ function quickShowResult() {
        "<button id='qwatch'>" + L("qWatch") + "</button>" +
        "<button id='qhub'>" + L("hub") + "</button></div>";
   $("#qbox").innerHTML = h;
+  if (typeof mineBind === "function" && QM.finalData) {
+    mineBind(Object.assign({ sid: "S1" }, QM.finalData), "quick");
+  }
   $("#qagain").onclick = startQuick;
   $("#qfull").onclick = () => { quickLeave();
                                 const s = SCEN.find(x => x.sid === "S1");
@@ -403,7 +413,6 @@ function quickHistoryHTML() {
   if (!QM.picks.length) return "";
   let h = "<div class='qhist'><div class='lbl'>" + L("yourDecisions") + "</div>";
   QM.picks.forEach((p, i) => {
-    const a = BYID[p.aid];
     h += "<div class='qh'><b>" + (i + 1) + ".</b> " +
          actText(p.aid) +
          "<span>" + plantReply(p.result || "") + "</span></div>";

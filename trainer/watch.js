@@ -13,8 +13,13 @@
 // показывает те же 20 виртуальных секунд за одну реальную.
 // =====================================================================
 
-const MANIFEST = @@MANIFEST@@;
-const TRACES = @@TRACES@@;
+// Данные прогонов кладёт сборка (build_trainer.py) отдельным объявлением
+// перед этим файлом. Здесь они только читаются, с пустым запасным
+// значением: файл должен оставаться разбираемым JavaScript сам по себе,
+// иначе редактор теряет разбор всего остального.
+const MANIFEST = (typeof NH3_MANIFEST !== "undefined") ? NH3_MANIFEST
+  : { benchmark: {}, scenarios: [], agents: [], runs: [], esd_just: {} };
+const TRACES = (typeof NH3_TRACES !== "undefined") ? NH3_TRACES : {};
 
 // Подписи вынесены в один объект: английская версия добавляется сюда же,
 // без охоты за литералами по всему файлу.
@@ -42,6 +47,11 @@ const WL = {
   resume: "продолжить",
   back: "назад",
   ponr: "точка невозврата",
+  ponrTag: "невозврат",
+  tlLegend: "толщина отметки — цена раздумий в токенах · приглушённая — " +
+            "бездействие · жёлтая — текущее решение · белый бегунок — " +
+            "время задачи, за него можно тянуть · красная черта — точка " +
+            "невозврата",
   outcome: "Исход",
   score: "балл",
   mean: "среднее",
@@ -63,7 +73,7 @@ const WL = {
   hubRecs: "записей",
   hubCmpNote: "программы и опорные политики по всем задачам",
   hubDemoNote: "три-четыре решения, около двух минут",
-  hubPlayNote: "полная задача в тех же условиях, что у программ",
+  hubPlayNote: "шесть задач в тех же условиях, что у программ, и короткая проба",
   beginWatch: "НАЧАТЬ ПРОСМОТР",
   briefTook: "прошла эту задачу за",
   briefThink: "на раздумья ушло",
@@ -100,6 +110,27 @@ const WL = {
   langLimit: "Команды, вводные и ответы установки приходят из имитатора " +
              "по-русски; рассуждения моделей сохранены дословно.",
   base: "база",
+  leaveAsk: "Выйти из задачи? Прогон не будет засчитан.",
+  playOutAsk: "Доиграть задачу до конца без вмешательства? Время " +
+              "прокрутится, решения больше подавать нельзя.",
+  playOutBusy: "задача доигрывается, установка живёт…",
+  diffOpen: "сравнить решения",
+  mineOwn: "свой",
+  diffTitle: "Чем решения двух программ отличались",
+  diffCommon: "совпало команд",
+  diffFirst: "первое расхождение",
+  diffPonrLine: "точка невозврата — ниже аварию предотвратить уже нельзя",
+  diffEnded: "задача окончена",
+  diffCat: "КАТАСТРОФА",
+  diffNote: "Выравнивание -- по последовательности команд, а не по времени: " +
+            "одна и та же команда, поданная позже, остаётся совпадением со " +
+            "сдвигом времени. Серые строки -- команда совпала, цветные -- " +
+            "разошлись. Времена и токены взяты из сохранённых протоколов.",
+  diffNoPair: "для сравнения нужны две записи одной задачи",
+  userRuns: "Прогоны через провайдера",
+  userNote: "измерены самостоятельно (benchmark.py run); не часть " +
+            "опубликованной матрицы",
+  baseRuns: "Опубликованная матрица",
   seekBack: "← назад, с перезапуском",
   startedWith: "начало задачи",
   unitS: "с",
@@ -308,10 +339,10 @@ function showHub() {
   const box = $("#hubbox");
   box.innerHTML = "";
   const nWatch = MANIFEST.runs.filter(r => r.watchable).length;
+  // Быстрая проба переехала в список задач: это та же задача 1, короче.
   const items = [
     ["watch", L("watch"), L("hubRecs") + ": " + nWatch, false],
     ["compare", L("compare"), L("hubCmpNote"), false],
-    ["demo", L("demo"), L("hubDemoNote"), false],
     ["play", L("play"), L("hubPlayNote"), false],
   ];
   items.forEach(([key, title, note, soon]) => {
@@ -322,7 +353,6 @@ function showHub() {
     b.onclick = () => {
       if (key === "watch") showWatchPick();
       else if (key === "compare") showCompare();
-      else if (key === "demo") showQuickBrief();
       else showMenu();
     };
     box.appendChild(b);
@@ -336,16 +366,27 @@ function showHub() {
 
 function showWatchPick() {
   const box = $("#wpickbox");
-  const models = MANIFEST.agents.filter(a => a.kind === "model");
+  // Свои прогоны тоже смотрятся: у них есть протокол, а значит и запись.
+  const models = MANIFEST.agents.filter(
+    a => a.kind === "model" || a.kind === "user");
   const sids = MANIFEST.scenarios.map(s => s.sid);
   let h = "<table class='wtab'><tr><th></th>";
   sids.forEach(s => { h += "<th>" + scenNo(s) + "</th>"; });
   h += "</tr>";
   models.forEach(m => {
-    h += "<tr><td class='nm'>" + m.id + "</td>";
+    // Две записи одной модели на разных языках задания различаются только
+    // пометкой -- без неё в списке два одинаковых имени.
+    h += "<tr><td class='nm'>" +
+         (m.kind === "user"
+          ? "<span class='mbadge'>" + L("mineOwn") + "</span>" : "") +
+         (m.prompt_lang && m.prompt_lang !== "ru"
+          ? "<span class='mbadge'>" + m.prompt_lang.toUpperCase() +
+            "</span>" : "") +
+         esc(m.id) + "</td>";
     sids.forEach(sid => {
       const r = MANIFEST.runs.find(
-        x => x.agent === m.id && x.scenario === sid);
+        x => x.agent === m.id && x.kind === m.kind && x.scenario === sid
+             && x.prompt_lang === m.prompt_lang);
       if (!r || !r.watchable) { h += "<td class='na'>—</td>"; return; }
       const cls = r.CAT.length ? "cat" : (r.clean ? "ok" : "maj");
       h += "<td><button class='wcell " + cls + "' data-run='" + r.id + "'>" +
@@ -393,8 +434,13 @@ function showWatchBrief(runId) {
 }
 
 function outcomeText(r) {
-  if (r.CAT.length) return L("cat") + " (" + r.CAT.join("+") + ")";
-  if (r.MAJ.length) return L("prevented") + ", " + L("damage") + " " + r.MAJ.join("+");
+  const code = c => outcomeCode(c);
+  if (r.CAT.length) {
+    return L("cat") + " (" + r.CAT.map(code).join("+") + ")";
+  }
+  if (r.MAJ.length) {
+    return L("prevented") + ", " + L("damage") + " " + r.MAJ.map(code).join("+");
+  }
   return L("clean");
 }
 
@@ -529,8 +575,9 @@ function watchDoAct() {
   WM.i += 1;
   WM.phase = "act";
   WM.thinkLeft = 0;
-  const a = BYID[st.action];
-  pushLog("[" + hhmmss(WM.tNow) + "] " + (a ? TR(a.text) : st.action) +
+  // Название команды -- через actText: TR переводит только обозначения
+  // оборудования, поэтому в английском журнале оставался русский текст.
+  pushLog("[" + hhmmss(WM.tNow) + "] " + actText(st.action) +
     "  (" + (st.tokens || 0) + " " + L("tokens") + ", " +
     L("thinkS") + " " + Math.round(WM.thinkTotal) + " " +
     L("unitS") + ")");
@@ -638,11 +685,12 @@ function renderWatchBar() {
     // По умолчанию показывается короткая выжимка: на стенде длинное
     // рассуждение никто не читает, но возможность увидеть подлинный
     // ответ целиком должна остаться -- иначе это уже не протокол.
-    const short = reply.split(/\n\s*\n/)[0].slice(0, 400);
+    const short = replyExcerpt(reply, 400);
+    const full = replyMarks(reply);
     h += "<div class='wrsn'><div class='lbl'>" + L("reasoning") + "</div>" +
          "<div id='wshort'>" + esc(short) +
-         (reply.length > short.length ? "…" : "") + "</div>" +
-         "<div id='wfull' style='display:none'>" + esc(reply) + "</div>" +
+         (full.length > short.length ? "…" : "") + "</div>" +
+         "<div id='wfull' style='display:none'>" + esc(full) + "</div>" +
          "<button id='wtog'>" + L("rawReply") + "</button></div>";
   }
 
@@ -820,6 +868,9 @@ function renderTimeline() {
     const px = Math.min(100, 100 * ponr / hz);
     h += "<i class='ponr' style='left:" + px.toFixed(2) + "%' title='" +
          L("ponr") + " " + hhmmss(ponr) + "'></i>";
+    // Красную черту подписываем: на видео подсказку мышью не покажешь.
+    h += "<span class='ponrlab' style='left:" + px.toFixed(2) + "%'>" +
+         L("ponrTag") + "</span>";
   }
   // Полоса размышления и бегунок рисуются один раз, а двигаются потом через
   // style без перерисовки разметки: перерисовка innerHTML на каждой порции
@@ -827,7 +878,8 @@ function renderTimeline() {
   h += "<i class='thinkspan' style='display:none'></i>";
   h += "<i class='now'></i>";
   h += "</div><div class='tlax'><span>00:00</span><span class='nowt'>" +
-       hhmmss(WM.tNow) + "</span><span>" + hhmmss(hz) + "</span></div>";
+       hhmmss(WM.tNow) + "</span><span>" + hhmmss(hz) + "</span></div>" +
+       "<div class='tlleg'>" + L("tlLegend") + "</div>";
   $("#timeline").innerHTML = h;
   $("#timeline").querySelectorAll(".d").forEach(el => {
     el.onclick = (e) => { e.stopPropagation(); inspectStep(+el.dataset.i); };
@@ -974,7 +1026,6 @@ function inspectStep(i) {
   const s = WM.steps[i];
   if (!s) return;
   const think = (s.tokens || 0) / MANIFEST.benchmark.think_rate_tok_per_s;
-  const a = BYID[s.action];
   let h = "<h3>" + L("decision") + " " + (i + 1) + " · " + hhmmss(s.t_rel) +
           "</h3>";
   h += "<table class='kv'>";
@@ -991,10 +1042,187 @@ function inspectStep(i) {
        " " + L("unitS") + " <span class='mut'>" + L("wallNote") + "</span></td></tr>";
   h += "</table>";
   h += "<div class='lbl'>" + L("reasoning") + "</div><div class='rsnfull'>" +
-       esc((s.reply || "").trim() || "—") + "</div>";
+       esc(replyMarks((s.reply || "").trim()) || "—") + "</div>";
   $("#insptxt").innerHTML = h;
   $("#inspdlg").style.display = "";
 }
+
+// ---------------------------------------------------------------------
+// Сравнение решений двух прогонов
+//
+// Отвечает на один вопрос: где две программы разошлись. Последовательности
+// команд выравниваются наибольшей общей подпоследовательностью -- там, где
+// они совпадают, строки стоят рядом; где разошлись, каждая в своей
+// половине. Поэтому «одно и то же, но на минуту позже» видно как
+// совпадение со сдвигом времени, а не как полное расхождение.
+//
+// Ничего не пересчитывается: времена, команды и токены берутся из
+// сохранённых протоколов.
+// ---------------------------------------------------------------------
+
+// Решения прогона из его протокола: время наблюдения, команда, токены.
+function diffSteps(runId) {
+  const tr = TRACES[runId] || [];
+  return tr.map((s, i) => ({
+    i: i + 1,
+    t: s.t_rel,
+    aid: s.action || "",
+    tokens: s.tokens || 0,
+    status: s.status || "",
+  })).filter(s => s.aid);
+}
+
+// Наибольшая общая подпоследовательность по идентификаторам команд.
+function diffAlign(A, B) {
+  const n = A.length, m = B.length;
+  const dp = [];
+  for (let i = 0; i <= n; i++) dp.push(new Int32Array(m + 1));
+  for (let i = n - 1; i >= 0; i--) {
+    for (let j = m - 1; j >= 0; j--) {
+      dp[i][j] = (A[i].aid === B[j].aid)
+        ? dp[i + 1][j + 1] + 1
+        : Math.max(dp[i + 1][j], dp[i][j + 1]);
+    }
+  }
+  const rows = [];
+  let i = 0, j = 0;
+  while (i < n && j < m) {
+    if (A[i].aid === B[j].aid) { rows.push({ a: A[i], b: B[j], same: true });
+                                 i++; j++; }
+    else if (dp[i + 1][j] >= dp[i][j + 1]) { rows.push({ a: A[i], b: null });
+                                             i++; }
+    else { rows.push({ a: null, b: B[j] }); j++; }
+  }
+  while (i < n) { rows.push({ a: A[i++], b: null }); }
+  while (j < m) { rows.push({ a: null, b: B[j++] }); }
+  return rows;
+}
+
+// Расхождение показывается парами, а не двумя списками подряд.
+//
+// Выравнивание по НОП даёт блоки «только A», потом «только B», и времена в
+// двух половинах идут вразнобой: у A девятая минута, у B первая. Внутри
+// блока расхождения решения ставятся рядом по порядку, поэтому в каждом
+// столбце время возрастает, а строка читается как «A сделал это, B то».
+function diffPairBlocks(rows) {
+  const out = [];
+  let i = 0;
+  while (i < rows.length) {
+    if (rows[i].same) { out.push(rows[i++]); continue; }
+    const a = [], b = [];
+    while (i < rows.length && !rows[i].same) {
+      if (rows[i].a) a.push(rows[i].a);
+      if (rows[i].b) b.push(rows[i].b);
+      i++;
+    }
+    const n = Math.max(a.length, b.length);
+    for (let k = 0; k < n; k++) {
+      out.push({ a: a[k] || null, b: b[k] || null, same: false });
+    }
+  }
+  return out;
+}
+
+// Прогоны, у которых есть протокол, по задачам.
+function diffRuns(sid) {
+  return MANIFEST.runs.filter(r => r.scenario === sid && r.watchable);
+}
+
+function showDiff(sid, idA, idB) {
+  const sids = MANIFEST.scenarios.map(s => s.sid)
+    .filter(s => diffRuns(s).length >= 2);
+  if (!sids.length) { alert(L("diffNoPair")); return; }
+  DIFF.sid = sids.indexOf(sid) >= 0 ? sid : sids[0];
+  const runs = diffRuns(DIFF.sid);
+  const has = id => runs.some(r => r.id === id);
+  DIFF.a = has(idA) ? idA : runs[0].id;
+  DIFF.b = has(idB) && idB !== DIFF.a
+    ? idB : (runs.find(r => r.id !== DIFF.a) || runs[0]).id;
+
+  const sel = (id, val, opts) =>
+    "<select id='" + id + "'>" + opts.map(o =>
+      "<option value='" + esc(o[0]) + "'" +
+      (o[0] === val ? " selected" : "") + ">" + esc(o[1]) + "</option>"
+    ).join("") + "</select>";
+
+  const rA = wRun(DIFF.a), rB = wRun(DIFF.b);
+  const sc = wScen(DIFF.sid);
+  const A = diffSteps(DIFF.a), B = diffSteps(DIFF.b);
+  const rows = diffPairBlocks(diffAlign(A, B));
+
+  let h = "<h3>" + L("diffTitle") + "</h3>";
+  h += "<div class='diffpick'>" +
+    sel("dfs", DIFF.sid, sids.map(s => [s, L("scen") + " " + scenNo(s)])) +
+    sel("dfa", DIFF.a, runs.map(r => [r.id, runLabel(r)])) +
+    sel("dfb", DIFF.b, runs.map(r => [r.id, runLabel(r)])) +
+    "</div>";
+
+  // Итоги обоих прогонов рядом: расхождение в решениях интересно ровно
+  // потому, что исходы разные.
+  // Исход берётся из кодов прогона, а не из готовой строки манифеста: в
+  // отчётах ущерб пишется как МАЙn, а в тренажёре -- кодами КАТ/УЩ (и
+  // CAT/MAJ по-английски), и смешивать два обозначения в одной таблице
+  // нельзя.
+  const head = r => "<b>" + esc(runLabel(r)) + "</b> · " + L("score") + " " +
+    r.score + " · " +
+    (r.CAT.length ? "<span class='bad'>" + outcomeText(r) + "</span>"
+                  : outcomeText(r)) + " · " +
+    L("decisions") + " " + ((r.trace_stats || {}).n_decisions || 0);
+  h += "<div class='diffsum'><div>" + head(rA) + "</div><div>" +
+       head(rB) + "</div></div>";
+
+  const same = rows.filter(x => x.same).length;
+  const first = rows.find(x => !x.same);
+  const firstT = first ? (first.a ? first.a.t : first.b.t) : null;
+  h += "<div class='mut'>" + L("diffCommon") + ": " + same + " " +
+       L("of") + " " + Math.max(A.length, B.length) +
+       (firstT !== null ? " · " + L("diffFirst") + " " + hhmmss(firstT) : "") +
+       (sc && sc.ponr_cat_s !== null && sc.ponr_cat_s !== undefined
+        ? " · " + L("ponr") + " " + hhmmss(sc.ponr_cat_s) : "") +
+       "</div>";
+
+  h += "<table class='dtab'><tr><th>t</th><th>" + esc(runLabel(rA)) +
+       "</th><th>t</th><th>" + esc(runLabel(rB)) + "</th></tr>";
+  const ponr = sc ? sc.ponr_cat_s : null;
+  let ponrShown = (ponr === null || ponr === undefined);
+  rows.forEach(x => {
+    // Разделитель ставится перед первым решением, которое уже за точкой
+    // невозврата: выравнивание идёт по командам, поэтому черта проводится
+    // по первому из двух столбцов, который её пересёк.
+    const t = Math.min(x.a ? x.a.t : Infinity, x.b ? x.b.t : Infinity);
+    if (!ponrShown && t > ponr) {
+      ponrShown = true;
+      h += "<tr class='ponrline'><td colspan='4'>" + hhmmss(ponr) + " — " +
+           L("diffPonrLine") + "</td></tr>";
+    }
+    const cls = x.same ? "eq"
+      : (x.a && x.b) ? "dif" : (x.a ? "onlya" : "onlyb");
+    const cell = s => s
+      ? "<td class='tm'>" + hhmmss(s.t) + "</td><td>" + actText(s.aid) +
+        "<span class='tk'>" + s.tokens + " " + L("tokShort") + "</span></td>"
+      : "<td class='tm'></td><td class='na'></td>";
+    h += "<tr class='" + cls + "'>" + cell(x.a) + cell(x.b) + "</tr>";
+  });
+  // Чем кончилось -- в той же таблице и под своим столбцом: ради этого
+  // расхождение в решениях и смотрят.
+  const endCell = r => {
+    const code = r.CAT.length ? r.CAT.map(outcomeCode).join("+") : "";
+    return "<td class='tm'>" + hhmmss(r.t_end_s) + "</td><td>" +
+      (code ? "<b class='bad'>" + L("diffCat") + " " + code + "</b>"
+            : L("diffEnded") + ", " + outcomeText(r)) + "</td>";
+  };
+  h += "<tr class='endrow'>" + endCell(rA) + endCell(rB) + "</tr>";
+  h += "</table>";
+  h += "<p class='mut'>" + L("diffNote") + "</p>";
+
+  $("#difftxt").innerHTML = h;
+  $("#diffdlg").style.display = "";
+  $("#dfs").onchange = () => showDiff($("#dfs").value, null, null);
+  $("#dfa").onchange = () => showDiff(DIFF.sid, $("#dfa").value, DIFF.b);
+  $("#dfb").onchange = () => showDiff(DIFF.sid, DIFF.a, $("#dfb").value);
+}
+
+let DIFF = { sid: null, a: null, b: null };
 
 // ---------------------------------------------------------------------
 // Сравнение
@@ -1005,16 +1233,27 @@ function showCompare() {
   let h = "<table class='wtab'><tr><th>" + L("agent") + "</th>";
   sids.forEach(s => { h += "<th>" + scenNo(s) + "</th>"; });
   h += "<th>" + L("mean") + "</th><th>" + L("regGap") + "</th></tr>";
+  let lastKind = null;
   MANIFEST.agents.forEach(a => {
-    h += "<tr class='" + (a.kind === "model" ? "mdl" : "pol") + "'>" +
-         "<td class='nm' title='" + esc(a.desc || "") + "'>" +
-         esc(a.label || a.id) + "</td>";
+    // Опубликованная матрица и свои прогоны -- разные вещи, и это должно
+    // быть видно в таблице, а не только в описании.
+    if (a.kind === "user" && lastKind !== "user") {
+      h += "<tr class='userhead'><td class='nm'>" + L("userRuns") +
+           "</td><td colspan='" + (sids.length + 2) + "' class='mut'>" +
+           L("userNote") + "</td></tr>";
+    }
+    lastKind = a.kind;
+    h += "<tr class='" + (a.kind === "policy" ? "pol" : "mdl") + "'>" +
+         "<td class='nm' title='" + esc(agentDesc(a)) + "'>" +
+         esc(agentLabel(a)) + "</td>";
     sids.forEach(sid => {
-      const r = MANIFEST.runs.find(x => x.agent === a.id && x.scenario === sid);
+      const r = MANIFEST.runs.find(
+        x => x.agent === a.id && x.kind === a.kind && x.scenario === sid
+             && x.prompt_lang === a.prompt_lang);
       if (!r) { h += "<td class='na'>—</td>"; return; }
       const cls = r.CAT.length ? "cat" : (r.clean ? "ok" : "maj");
-      const badge = r.CAT.length ? r.CAT.join("+")
-        : (r.MAJ.length ? r.MAJ.join("+") : L("clean"));
+      const badge = r.CAT.length ? r.CAT.map(outcomeCode).join("+")
+        : (r.MAJ.length ? r.MAJ.map(outcomeCode).join("+") : L("clean"));
       h += "<td class='" + cls + "'" +
            (r.watchable ? " data-run='" + r.id + "'" : "") +
            " title='" + badge + "'>" + r.score +
@@ -1034,7 +1273,53 @@ function showCompare() {
           : (a.id === "regulation" ? L("base")
              : (a.reg_gap > 0 ? "+" : "") + a.reg_gap)) + "</td></tr>";
   });
+  // Свои прогоны -- теми же правилами, что и опубликованные строки, но
+  // отдельным разделом: это не часть опубликованного набора.
+  const mine = (typeof mineAgents === "function") ? mineAgents() : [];
+  if (mine.length) {
+    h += "<tr class='minehead'><td class='nm'>" + L("mineHead") +
+         "</td><td colspan='" + (sids.length + 2) + "' class='mut'>" +
+         L("mineNote") + "</td></tr>";
+    mine.forEach(a => {
+      const q = a.kind === "quick";
+      h += "<tr class='mine" + (q ? " qrow" : "") + "'><td class='nm'>" +
+           "<span class='mbadge'>" + (q ? L("mineQuick") : L("mineHuman")) +
+           "</span> " + esc(a.id) +
+           "<button class='mdel' data-kind='" + a.kind + "' data-agent='" +
+           esc(a.id) + "' title='" + esc(L("mineDel")) + "'>×</button></td>";
+      sids.forEach(sid => {
+        const r = a.runs[sid];
+        if (!r) { h += "<td class='na'>—</td>"; return; }
+        const cls = (r.CAT || []).length ? "cat"
+          : ((r.MAJ || []).length ? "maj" : "ok");
+        const badge = (r.CAT || []).length ? r.CAT.map(outcomeCode).join("+")
+          : ((r.MAJ || []).length ? r.MAJ.map(outcomeCode).join("+")
+                                  : L("clean"));
+        const mark = r.forced ? "<i title='" + esc(L("mineStoppedNote")) +
+                                "'>⏹</i>"
+                   : (q ? "<i title='" + esc(L("mineQuickNote")) + "'>~</i>"
+                        : "");
+        h += "<td class='" + cls + "' title='" + esc(badge + " · " + r.when) +
+             "'>" + (r.score === null ? "—" : r.score) + mark + "</td>";
+      });
+      const part = !a.complete;
+      h += "<td class='mean" + (part ? " part" : "") + "'>" +
+           (a.score_mean === null ? "—" : a.score_mean) +
+           (part ? "<i title='" + L("measuredOf") + " " + a.n_scored + " " +
+                   L("of") + " " + a.n_total + " " + L("ofTasks") +
+                   "'>*</i>" : "") +
+           "</td><td class='gap'>" +
+           (a.reg_gap === null
+            ? "<span class='mut'>" + (q ? L("mineQuick") : L("needFull")) +
+              "</span>"
+            : (a.reg_gap > 0 ? "+" : "") + a.reg_gap) + "</td></tr>";
+    });
+  }
   h += "</table>";
+  if (mine.length) {
+    h += "<p class='mut'><button class='lnk' id='mineclr'>" + L("mineClear") +
+         "</button></p>";
+  }
   const partial = MANIFEST.agents.filter(a => !a.complete && a.n_scored);
   if (partial.length) {
     h += "<p class='mut'>* " + L("partialNote") + ": " +
@@ -1042,6 +1327,7 @@ function showCompare() {
                           " " + a.n_total).join("; ") +
          ". " + L("partialTail") + "</p>";
   }
+  h += "<p><button class='lnk' id='diffb'>" + L("diffOpen") + "</button></p>";
   h += "<p class='mut'>" + L("scoreNote") + "</p>";
   // Пометка сборки: если в таблицу добавлены свои прогоны, об этом должно
   // быть сказано на самой таблице, а не только в команде сборки.
@@ -1061,6 +1347,21 @@ function showCompare() {
     el.style.cursor = "pointer";
     el.onclick = () => showWatchBrief(el.dataset.run);
   });
+  $("#cmpbox").querySelectorAll(".mdel").forEach(el => {
+    el.onclick = ev => {
+      ev.stopPropagation();
+      if (!confirm(L("mineDelAsk") + " " + el.dataset.agent)) return;
+      mineDelAgent(el.dataset.kind, el.dataset.agent);
+      showCompare();
+    };
+  });
+  const db = $("#diffb");
+  if (db) db.onclick = () => showDiff(DIFF.sid, DIFF.a, DIFF.b);
+  const clr = $("#mineclr");
+  if (clr) clr.onclick = () => {
+    if (!confirm(L("mineClear") + "?")) return;
+    mineClear(); showCompare();
+  };
   showScreen("cmp");
 }
 
@@ -1073,6 +1374,14 @@ function applyMode() {
   const q = mode === "quick";
   $("#watchwrap").style.display = w ? "" : "none";
   $("#quickwrap").style.display = q ? "" : "none";
+  // Доигрывание -- только в полной задаче: в пробе время и так
+  // проматывается, в записи для этого есть «до конца».
+  const po = $("#playoutb");
+  if (po) po.style.display = (!w && !q) ? "" : "none";
+  // Полоска прохождения -- человеку. В просмотре записи её роль играет
+  // полоса решений, там она подробнее.
+  const pb = $("#playbar");
+  if (pb) pb.style.display = w ? "none" : "block";
   // Каталог из 133 команд скрыт и при просмотре записи, и в быстрой пробе:
   // там команды подаёт запись, здесь -- выбор из четырёх.
   $("#cmdcard").style.display = (w || q) ? "none" : "";

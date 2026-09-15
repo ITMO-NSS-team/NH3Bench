@@ -143,12 +143,26 @@ def scenarios_json() -> str:
     return json.dumps(out, ensure_ascii=False)
 
 
+def _raw_en(obs, ep) -> str:
+    """Английский вид наблюдения. Нет модуля перевода -- отдаём русский."""
+    try:
+        from nh3twin import prompt_en
+        return prompt_en.obs_text(obs.render(), ep.scen.brief, ep.scen.sid)
+    except Exception:                                   # noqa: BLE001
+        return obs.render()
+
+
 class Session:
     SAMPLE_S = 10.0                 # шаг записи истории, виртуальные секунды
 
-    def __init__(self, sid: str):
+    def __init__(self, sid: str, esd_just: bool = False):
         self.ep = make_episode(sid)
         self.sid = sid
+        # Обоснован ли аварийный останов в этом сценарии -- величина
+        # сценария, а не прогона: она выведена из опорных политик
+        # (report_metrics.esd_justification) и приходит из манифеста.
+        # Считать её здесь заново нечем: нужны прогоны бездействия и ESD.
+        self.esd_just = bool(esd_just)
         self.records = []           # {t, aid, think, exec, result}
         self.think_total = 0.0
         self.paused_used = False
@@ -260,6 +274,11 @@ class Session:
             "comps": comps, "evaps": evaps, "pumps": pumps, "conds": conds,
             "legal": [a.aid for a in ep.legal_actions()],
             "raw": obs.render(),
+            # То же наблюдение по-английски -- для английского интерфейса.
+            # Собирается тем же переводчиком, что и англоязычный трек
+            # задания, поэтому человек видит ровно то, что видела бы
+            # модель на английском задании.
+            "raw_en": _raw_en(obs, ep),
             "note": ep.note,
         }
         return json.dumps(out, ensure_ascii=False)
@@ -326,13 +345,35 @@ class Session:
             "events": events[-60:],
             "barriers": [list(b) for b in ep.barriers]
                         + [list(b) for b in ep.safety.bar_violations],
+            **self._score(),
         }, ensure_ascii=False)
+
+    def _score(self) -> dict:
+        """
+        Балл прогона человека -- теми же функциями, что и опубликованная
+        таблица.
+
+        Строку прогона собирает Episode.result, балл считает
+        metrics.bench_score_run: ровно тот путь, которым посчитаны клетки
+        в results/. Своей формулы у тренажёра нет и быть не должно --
+        иначе результат человека нельзя было бы ставить рядом с
+        результатом модели.
+        """
+        try:
+            from nh3twin import metrics
+            row = self.ep.result(0.0)
+            row["esd_justified"] = self.esd_just
+            return {"score": metrics.bench_score_run(row),
+                    "esd_justified": self.esd_just}
+        except Exception as e:                      # noqa: BLE001
+            # Без балла итог всё равно показывается: исход и ущерб важнее.
+            return {"score": None, "score_err": str(e)[:200]}
 
 
 SESSION = None
 
 
-def start(sid: str) -> str:
+def start(sid: str, esd_just: bool = False) -> str:
     global SESSION
-    SESSION = Session(sid)
+    SESSION = Session(sid, esd_just=esd_just)
     return SESSION.observe()

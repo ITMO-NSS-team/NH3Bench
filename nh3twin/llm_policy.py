@@ -134,7 +134,11 @@ def catalog_text() -> str:
     return "\n".join(L)
 
 
-def system_prompt() -> str:
+def system_prompt(lang: str = "ru") -> str:
+    """Системная часть. Английский трек -- отдельный, помечается в прогоне."""
+    if lang == "en":
+        from .prompt_en import system_prompt as _en
+        return _en()
     return _ROLE + "\n" + catalog_text()
 
 
@@ -157,7 +161,10 @@ def _history_text(log, keep: int) -> str:
     return "\n".join(L)
 
 
-def user_prompt(obs, legal, ep, keep: int) -> str:
+def user_prompt(obs, legal, ep, keep: int, lang: str = "ru") -> str:
+    if lang == "en":
+        from .prompt_en import user_prompt as _en
+        return _en(obs, legal, ep, keep)
     legal_ids = {a.aid for a in legal}
     blocked = [a.aid for a in CATALOG if a.aid not in legal_ids]
     left = ep.horizon - obs.t_rel
@@ -245,7 +252,10 @@ class ClaudeCLIPolicy(Policy):
 
     def __init__(self, model="haiku", cli=DEFAULT_CLI, history=14,
                  timeout=240, retries=1, trace_path=None, sysfile=None,
-                 label=None, verbose=False):
+                 label=None, verbose=False, prompt_lang="ru"):
+        # Язык задания. Русский -- канонический: 24 опубликованных прогона
+        # отвечали на него, и по умолчанию ничего не меняется.
+        self.prompt_lang = prompt_lang
         self.verbose = verbose
         self.model = model
         self.cli = cli
@@ -262,9 +272,10 @@ class ClaudeCLIPolicy(Policy):
         d = os.path.join(os.path.dirname(os.path.dirname(
             os.path.abspath(__file__))), "results", "_prompt")
         os.makedirs(d, exist_ok=True)
-        path = os.path.join(d, "system_prompt.txt")
+        suffix = "" if self.prompt_lang == "ru" else "_" + self.prompt_lang
+        path = os.path.join(d, f"system_prompt{suffix}.txt")
         with open(path, "w", encoding="utf-8") as f:
-            f.write(system_prompt())
+            f.write(system_prompt(self.prompt_lang))
         return path
 
     # -- вызов модели ----------------------------------------------------
@@ -305,7 +316,8 @@ class ClaudeCLIPolicy(Policy):
 
     def act(self, obs, legal, ep):
         legal_ids = {a.aid for a in legal}
-        prompt = user_prompt(obs, legal, ep, self.history)
+        prompt = user_prompt(obs, legal, ep, self.history,
+                             getattr(self, "prompt_lang", "ru"))
 
         t0 = time.time()
         text = ""

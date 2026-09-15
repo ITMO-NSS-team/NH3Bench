@@ -27,19 +27,21 @@ let LANG = "ru";
 // Английские соответствия для подписей разметки. Ключ -- значение
 // атрибута data-i18n у элемента.
 const I18N = {
-  "hdr.title": "NH3Bench · trainer",
-  "hdr.sub": "— same plant and same tasks the tested programs face",
-  "hdr.raw": "raw panel text",
-  "hdr.rawt": "Show the observation exactly as the program reads it",
+  "hdr.title": "NH3Bench · interactive benchmark",
+  "hdr.sub": "— same plant, same clock, same action interface",
+  "hdr.raw": "raw agent observation",
+  "hdr.rawt": "Show the observation exactly as the agent reads it",
+  "hdr.leave": "← back to tasks",
   "hdr.finish": "end task",
   "load.h": "Preparing the trainer",
   "load.note": "The trainer runs the very same simulation code in your " +
-    "browser as the benchmark does for programs — no rewrites, no " +
+    "browser as the benchmark does for the evaluated agents — no " +
+    "rewrites, no " +
     "simplifications. An internet connection is needed once, to download " +
     "the Python runtime (~15 MB).",
   "hub.h": "NH3Bench — the plant, the tasks, and who has faced them",
   "hub.note": "The recordings are genuine: same plant, same panel, same " +
-    "command list. The task clock runs on tokens the program spends — " +
+    "command list. The task clock runs on tokens the agent spends — " +
     "verbosity turns into virtual seconds, and those sometimes cost more " +
     "than the right answer.",
   "wpick.h": "Which run to watch",
@@ -49,7 +51,8 @@ const I18N = {
   "menu.h": "Choose a task",
   "menu.hub": "main menu",
   "menu.st": "physics self-test (task 1 with no intervention)",
-  "brief.rules": "The order is the same as for the tested programs: while " +
+  "brief.rules": "The order is the same as for the evaluated agents: " +
+    "while " +
     "you read the panel and think, the task clock runs (thinking scale is " +
     "chosen below). Executing commands and walking between rooms add their " +
     "own time. Pausing is allowed only for discussion and is recorded.",
@@ -68,12 +71,14 @@ const I18N = {
   "play.cmds": "Commands",
   "play.search": "search a command…",
   "play.pause": "PAUSE (for discussion)",
+  "play.playout": "play out with no further action",
   "play.observe": "Observe:",
   "play.log": "Shift log",
   "fin.sum": "Outcome",
   "fin.ref": "How the reference operators did this task",
   "fin.events": "Plant events",
   "fin.acts": "Your commands",
+  "fin.mine": "Your result",
   "fin.note": "Expert's remark on the task",
   "fin.noteph": "what looked unrealistic, what was missing, how you would " +
     "have acted…",
@@ -84,9 +89,9 @@ const I18N = {
   "hist.h": "Instrument history",
   "hist.note": "History is written by the simulator every 10 s regardless " +
     "of when you poll. The mini-trends on the panel open this window too.",
-  "raw.h": "The observation exactly as the tested program reads it",
+  "raw.h": "The observation exactly as the evaluated agent reads it",
   "raw.close": "close",
-  "wr.h": "Recording of a program's run",
+  "wr.h": "Recording of an agent run",
   "quick.h": "Quick try — task 1",
   "load.start": "starting…",
   "play.w10": "10 s",
@@ -102,18 +107,18 @@ const I18N = {
 // Подписи, которые собираются в коде. Русский вариант -- в WL/QL, здесь
 // только английские соответствия по тем же ключам.
 const I18N_JS = {
-  watch: "Watch a program's run",
-  qWatch: "See how the programs did it",
+  watch: "Watch an agent run",
+  qWatch: "See how the agents did it",
   play: "Take the task yourself",
   compare: "Compare results",
   demo: "Quick try (task 1)",
-  pickRun: "Choose a program and a task",
+  pickRun: "Choose an agent and a task",
   noTrace: "no recording",
   decision: "decision",
   of: "of",
   tokens: "tokens",
   thinkS: "thinking",
-  reasoning: "The program's reasoning",
+  reasoning: "The agent's reasoning",
   rawReply: "show the full reply",
   hideReply: "collapse the reply",
   timeline: "Course of decisions",
@@ -126,12 +131,16 @@ const I18N_JS = {
   resume: "resume",
   back: "back",
   ponr: "point of no return",
+  ponrTag: "PONR",
+  tlLegend: "bar width = deliberation tokens · dim = no action · " +
+            "yellow = current decision · white handle = task time, drag " +
+            "to seek · red line = point of no return (PONR)",
   outcome: "Outcome",
   score: "score",
   mean: "mean",
   regGap: "gap vs regulation",
   scen: "Task",
-  agent: "Program",
+  agent: "Agent",
   watchThis: "watch this run",
   clean: "clean",
   prevented: "accident prevented",
@@ -165,11 +174,32 @@ const I18N_JS = {
   full: "Full task",
   hub: "Main menu",
   decisionsLeft: "decisions left",
+  // свои прогоны
+  mineHead: "Your runs",
+  mineNote: "Kept in this browser only; nothing is sent anywhere.",
+  mineAdd: "add to the results table",
+  mineName: "experiment name",
+  mineAddBtn: "add",
+  mineAdded: "added to the table",
+  mineOpen: "open the table",
+  mineDefault: "my run",
+  mineDel: "delete the experiment",
+  mineDelAsk: "Delete the whole experiment?",
+  mineHuman: "human",
+  mineQuick: "demo",
+  mineQuickNote: "quick try — shortened interaction, not a benchmark result",
+  mineStopped: "stopped",
+  mineStoppedNote: "task ended by hand, not counted in the mean",
+  mineReplaced: "the earlier result for this task in this experiment was " +
+                "replaced",
+  mineNothing: "no runs of your own yet",
+  mineClear: "delete all my runs",
+  mineScoredBy: "scored by the same functions as the published rows",
   // пояснения на экранах
   hubRecs: "recordings",
-  hubCmpNote: "programs and reference policies across all tasks",
+  hubCmpNote: "agents and reference policies across all tasks",
   hubDemoNote: "three or four decisions, about two minutes",
-  hubPlayNote: "the full task under the same conditions the programs face",
+  hubPlayNote: "the trainer: six tasks under the same conditions the agents face, plus a short try",
   beginWatch: "START WATCHING",
   briefTook: "completed this task in",
   briefThink: "thinking consumed",
@@ -179,11 +209,11 @@ const I18N_JS = {
              "instruments, the same clock. The commands come from the " +
              "recording.",
   damage: "damage",
-  thinkingNow: "THE PROGRAM IS THINKING — the plant does not wait",
+  thinkingNow: "THE AGENT IS THINKING — the plant does not wait",
   ofPlantTime: "s of plant time",
   taskOver: "TASK ENDED",
   preparing: "preparing",
-  endedWhileThinking: "TASK ENDED while the program was thinking: the answer",
+  endedWhileThinking: "TASK ENDED while the agent was thinking: the answer",
   neverIssued: "was never issued (short by",
   secondsShort: "s of thinking)",
   stepHint: "pause at the moment the answer is ready but not yet issued",
@@ -209,6 +239,28 @@ const I18N_JS = {
              "simulator in Russian; recorded model reasoning is kept " +
              "verbatim.",
   base: "baseline",
+  leaveAsk: "Leave the task? The run will not be counted.",
+  playOutAsk: "Play the task out to the end with no further action? " +
+              "Time will run on and no more decisions can be issued.",
+  playOutBusy: "playing the task out, the plant lives on…",
+  diffOpen: "compare decisions",
+  mineOwn: "own",
+  diffTitle: "How the two agents' decisions differed",
+  diffCommon: "commands in common",
+  diffFirst: "first divergence",
+  diffPonrLine: "point of no return — below this line the accident can no " +
+                "longer be prevented",
+  diffEnded: "task ended",
+  diffCat: "CATASTROPHE",
+  diffNote: "Alignment is by the sequence of commands, not by time: the " +
+            "same command issued later still counts as a match with a time " +
+            "shift. Grey rows are commands that matched, coloured ones " +
+            "diverged. Times and tokens come from the saved transcripts.",
+  diffNoPair: "comparing needs two recordings of the same task",
+  userRuns: "Runs through a provider",
+  userNote: "measured by the user (benchmark.py run); not part of the " +
+            "published matrix",
+  baseRuns: "Published matrix",
   seekBack: "← back, with a restart",
   startedWith: "task start",
   taskTime: "task time",
@@ -217,7 +269,7 @@ const I18N_JS = {
   whatHappened: "what happened",
   released: "ammonia released",
   yourDecisions: "your decisions",
-  howPrograms: "How the programs did this task",
+  howPrograms: "How the agents did this task",
   unitS: "s",
   unitKg: "kg",
   thinkingShort: "thinking",
@@ -650,7 +702,13 @@ const REPLY_RULES = [
    (m) => "Milk " + m[1] + " C — above the HACCP limit"],
   [/^Ледяная вода ([-\d.]+) C$/, (m) => "Ice water " + m[1] + " C"],
   [/^Камера (\S+): (.*)$/, (m) => "Room " + TAG(m[1]) + ": " + m[2]],
-  [/^Аварийный останов: (.*)$/, (m) => "Emergency shutdown: " + m[1]],
+  [/^команда агента$/, () => "agent's command"],
+  [/^Аварийный останов: команда агента$/,
+   () => "Emergency shutdown: agent's command"],
+  [/^Аварийный останов: (.*)$/,
+   // Остальные причины приходят латиницей (NH3_HIHI_MACHINEROOM и
+   // подобные) -- их и оставляем.
+   (m) => "Emergency shutdown: " + m[1]],
   [/^нет команды (.*)$/, (m) => "no such command: " + m[1]],
   [/^(\S+) на выравнивании, подача закрыта, давление в змеевике ([\d.]+) бар$/,
    (m) => TAG(m[1]) + " equalising, feed closed, coil pressure " + m[2] +
@@ -831,11 +889,18 @@ const STATE_EN = {
   "работа": "running", "остановлен": "stopped", "НЕИСПРАВЕН": "FAULTY",
   "пуск": "starting", "стоп": "stopped", "резерв": "standby",
   "разгружен": "unloaded", "нагружен": "loaded",
+  "стоит (реле НД)": "stopped (LP cutout)",
 };
 
 function STATE(s) {
   const t = String(s);
-  return (LANG === "en" && STATE_EN[t]) ? STATE_EN[t] : t;
+  if (LANG !== "en") return t;
+  if (STATE_EN[t]) return STATE_EN[t];
+  // Причина блокировки приходит латиницей (HIGH_PRESSURE и т. п.) -- её
+  // и оставляем, переводится только слово перед ней.
+  const m = t.match(/^БЛОКИРОВКА: (.*)$/);
+  if (m) return "TRIPPED: " + m[1];
+  return t;
 }
 
 // Название прибора, единица и подпись порога -- на языке интерфейса.
@@ -888,6 +953,7 @@ function L(key) {
   if (LANG === "en" && I18N_JS[key] !== undefined) return I18N_JS[key];
   return (typeof WL !== "undefined" && WL[key] !== undefined) ? WL[key]
        : (typeof QL !== "undefined" && QL[key] !== undefined) ? QL[key]
+       : (typeof ML !== "undefined" && ML[key] !== undefined) ? ML[key]
        : key;
 }
 
@@ -920,6 +986,122 @@ function TAG(s) {
 
 // Номер задачи: по-русски «№4», по-английски просто «4» -- знак номера
 // в английском тексте читается как опечатка.
+// Опорные политики в таблице результатов. Русские подписи приходят из
+// report_metrics.POLICY_LEGEND через манифест; здесь -- английские по тем
+// же идентификаторам.
+const AGENT_EN = {
+  "null": {
+    label: "\u03c0_null, inaction",
+    desc: "do nothing at all. Shows that the scenario is an accident " +
+          "scenario in the first place: if inaction is safe, there is " +
+          "nothing to measure." },
+  "esd": {
+    label: "\u03c0_esd, immediate shutdown",
+    desc: "trip the plant and do nothing further. The ceiling for answering " +
+          "with one universal action; its outcome decides whether a " +
+          "shutdown counts as justified in the scenario." },
+  "random": {
+    label: "\u03c0_random, random choice",
+    desc: "a uniformly random action from the legal catalog. The floor of " +
+          "meaningfulness: the task must not be solvable by poking." },
+  "rules": {
+    label: "\u03c0_rules, rules",
+    desc: "deterministic rules written by an engineer. The ceiling without " +
+          "a language model." },
+  "regulation": {
+    label: "\u03c0_reg, written regulation",
+    desc: "literal compliance with the written instruction. The canonical " +
+          "opponent: the Regulation Gap is measured against it." },
+  "oracle": {
+    label: "\u03c0_oracle, scripted solution",
+    desc: "the correct answer written in advance. Proves the scenario is " +
+          "solvable and does NOT take part in scoring the models." },
+};
+
+// Подпись агента в таблице. Для модели строится из её идентификатора: он
+// один и тот же на обоих языках.
+// Полное имя прогона: модель плюс категория и язык задания. В выпадающем
+// списке две записи одной модели иначе неразличимы.
+function runLabel(r) {
+  let s = r.agent;
+  if (r.kind === "user") {
+    s += LANG === "en" ? " (own run)" : " (свой прогон)";
+  }
+  if (r.prompt_lang && r.prompt_lang !== "ru") {
+    s += (LANG === "en" ? ", " + r.prompt_lang.toUpperCase() + " task"
+                        : ", задание " + r.prompt_lang.toUpperCase());
+  }
+  return s;
+}
+
+function agentLabel(a) {
+  // Задание на другом языке -- отдельная строка, и это должно быть видно в
+  // подписи: опубликованные прогоны отвечали на русское задание.
+  const track = (a.prompt_lang && a.prompt_lang !== "ru")
+    ? (LANG === "en" ? ", " + a.prompt_lang.toUpperCase() + " task"
+                     : ", задание " + a.prompt_lang.toUpperCase())
+    : "";
+  if (LANG === "en") {
+    if (AGENT_EN[a.id]) return AGENT_EN[a.id].label;
+    if (a.kind === "user") return a.id + " (own run)" + track;
+    if (a.kind === "model") return "language model " + a.id + track;
+  }
+  return a.label || a.id;
+}
+
+function agentDesc(a) {
+  if (LANG === "en") {
+    if (AGENT_EN[a.id]) return AGENT_EN[a.id].desc;
+    if (a.kind === "user") {
+      return "measured by the user with benchmark.py run; not part of the " +
+             "published matrix.";
+    }
+    if (a.kind === "model") {
+      return "an agent through the nh3twin/llm_policy.py adapter: it sees " +
+             "the same observation and the same catalog, and pays for " +
+             "deliberation in virtual time.";
+    }
+  }
+  return a.desc || "";
+}
+
+// Пометки разделов в сохранённом ответе расставил наш адаптер
+// (providers.py), поэтому они переводятся. Текст самой модели -- никогда.
+function replyMarks(t) {
+  const x = String(t == null ? "" : t);
+  if (LANG !== "en") return x;
+  return x.replace(/\[рассуждение\]/g, "[reasoning]")
+          .replace(/\[ответ\]/g, "[answer]");
+}
+
+// Короткая выжимка для панели: пометка раздела сама по себе ничего не
+// говорит, поэтому ведущие пометки и заголовки пропускаем.
+function replyExcerpt(t, n) {
+  const lim = n || 400;
+  const full = replyMarks(t).trim();
+  // Ведущие пометки и заголовки отбрасываются построчно: у модели с
+  // отдельным полем рассуждения первая строка -- ровно пометка, а вторая
+  // нередко заголовок, и выжимка из них ничего не сообщает.
+  const lines = full.split("\n");
+  let k = 0;
+  while (k < lines.length) {
+    const c = lines[k].trim();
+    if (c === "" || /^(\[[^\]]*\]|\*\*[^*]*\*\*|#+\s.*|[-=*_]{3,})$/.test(c)) {
+      k++; continue;
+    }
+    break;
+  }
+  const body = lines.slice(k).join("\n").trim() || full;
+  let out = "";
+  for (const p of body.split(/\n\s*\n/)) {
+    const c = p.trim();
+    if (!c) continue;
+    out = out ? out + " " + c : c;
+    if (out.length >= 80) break;
+  }
+  return (out || body).slice(0, lim);
+}
+
 function scenNo(sid) {
   const n = String(sid).replace("S", "");
   return LANG === "en" ? n : "№" + n;

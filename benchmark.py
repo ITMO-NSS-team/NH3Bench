@@ -185,6 +185,9 @@ def cmd_run(args):
     print(f"модель:     {args.model} через {args.provider}")
     print(f"задачи:     {sids}")
     print(f"попыток:    {args.trials} (сид окружения всегда 1)")
+    if args.prompt_lang != "ru":
+        print(f"язык задания: {args.prompt_lang} -- отдельный трек, с "
+              f"опубликованными русскими прогонами не сравнивается напрямую")
     print(f"результаты: {os.path.relpath(out, ROOT)}")
     print(f"протоколы:  {os.path.relpath(trace_dir, ROOT)}")
     print("Одно решение -- один вызов модели; эпизод это от нескольких "
@@ -203,6 +206,7 @@ def cmd_run(args):
                "--history", str(args.history),
                "--timeout", str(args.timeout),
                "--out", out,
+               "--prompt-lang", args.prompt_lang,
                "--trace-dir", trace_dir]
         if tag:
             cmd += ["--tag", tag]
@@ -241,7 +245,18 @@ def cmd_report(args):
     import demo_manifest as DM
     man = DM.build(llm_globs=args.llm or DM.LLM_GLOBS)
     sids = [s["sid"] for s in man["scenarios"]]
-    head = "агент".ljust(26) + "".join(s.rjust(6) for s in sids)
+
+    def row_name(a):
+        """Имя строки: модель плюс категория и язык задания."""
+        n = a["id"]
+        if a.get("kind") == "user":
+            n += " (свой)"
+        if a.get("prompt_lang", "ru") != "ru":
+            n += ", " + a["prompt_lang"].upper()
+        return n
+
+    width = max(26, min(42, max(len(row_name(a)) for a in man["agents"]) + 2))
+    head = "агент".ljust(width) + "".join(s.rjust(6) for s in sids)
     print(head + "среднее".rjust(9) + "разрыв".rjust(8))
     print("-" * len(head + "среднее".rjust(9) + "разрыв".rjust(8)))
     partial = []
@@ -259,16 +274,23 @@ def cmd_report(args):
                 else f"{a['score_mean']:.1f}" + ("*" if part else ""))
         gap = ("база" if a["id"] == "regulation"
                else "—" if a["reg_gap"] is None else f"{a['reg_gap']:+.1f}")
-        print(a["id"][:25].ljust(26) + cells + mean.rjust(9) + gap.rjust(8))
+        print(row_name(a)[:width - 1].ljust(width) + cells
+              + mean.rjust(9) + gap.rjust(8))
         partial.append(a) if part and a["n_scored"] else None
 
     if partial:
         print()
         for a in partial:
-            print(f"* {a['id']}: измерено {a['n_scored']} из "
+            print(f"* {row_name(a)}: измерено {a['n_scored']} из "
                   f"{a['n_total']} задач — среднее не сравнимо с полными "
                   f"строками, разрыв с регламентом не считается.")
 
+    langs = sorted({a.get("prompt_lang", "ru") for a in man["agents"]})
+    if len(langs) > 1:
+        print()
+        print("Строки с пометкой языка отвечали на задание на этом языке; "
+              "с опубликованными русскими прогонами они напрямую не "
+              "сравниваются.")
     b = man["benchmark"]
     print(f"\nБалл 0..100: катастрофа обнуляет прогон; люди, экономика и "
           f"дисциплина входят множителями.")
@@ -311,6 +333,9 @@ def main():
     r.add_argument("--max-tokens", type=int, default=None)
     r.add_argument("--api-key-env", default="OPENROUTER_API_KEY")
     r.add_argument("--out", default="")
+    r.add_argument("--prompt-lang", default="ru", choices=("ru", "en"),
+                   help="язык задания; ru -- канонический, на нём сделаны "
+                        "опубликованные прогоны")
     r.add_argument("--trace-dir", default="",
                    help="куда писать пошаговые протоколы")
 

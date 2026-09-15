@@ -93,31 +93,56 @@ python benchmark.py report
 ```
 
 The run is saved to `results/`, with a per-decision transcript next to it, and the report
-prints your model alongside the published rows. To then watch it, build the trainer with
-your file (below).
+prints your model alongside the published rows. Write it to `results/user/` instead and
+the demo picks it up as its own category, watchable like any published run:
+
+```bash
+python benchmark.py run --provider openrouter --model <slug> --scenarios S1 \
+       --out results/user/openrouter.jsonl --trace-dir results/user/traces
+```
+
+The task is Russian by default — that is what the published runs answered. `--prompt-lang
+en` gives the same task in English (role, catalog, panel and the plant's replies); it is
+reported as a separate column, since the model answers a different text.
 
 ## Interactive demo
 
 One self-contained HTML file, opened straight from disk. `EN`/`RU` in the header.
 
-```bash
-python trainer/make_snapshots.py      # once, ~4 min
-python trainer/build_trainer.py       # -> trainer/NH3Ops-тренажёр-эксперта.html
-```
-
-- **Watch** — any of the 24 recorded runs, replayed through the same twin the models
-  faced; the panel keeps living while the model thinks. Click a decision to see what the
-  model saw and what it answered.
-- **Compare** — the score matrix; a cell marked ▸ opens that run.
-- **Quick try** — task 1 in about two minutes: a few choices instead of the full catalog.
-- **Take the task yourself** — the whole task, on the models' terms.
-
-Your own runs go in the same interface:
+The file is **not in the repository** — it is a build artifact (2 MB, rebuilt from
+scratch on every change), so you produce it locally:
 
 ```bash
-python trainer/build_trainer.py --llm results/llm.jsonl results/my_run.jsonl \
-       --out trainer/with-my-model.html
+python -m pip install -r requirements.txt
+python trainer/make_snapshots.py      # once, ~4 min: start each task instantly
+python trainer/build_trainer.py       # -> trainer/nh3bench-demo.html
 ```
+
+Then open `trainer/nh3bench-demo.html` in a browser — no server, no build step. The
+first launch downloads the Python runtime (~15 MB) once, and after that the whole
+simulator runs locally in the page. Snapshots are optional: without them every task
+start costs a full plant warm-up, which takes minutes in a browser.
+
+- **Watch** — any recorded run, replayed through the same twin the models faced; the
+  panel keeps living while the model thinks. Click a decision to see what the model saw
+  and what it answered.
+- **Compare** — the score matrix; a cell marked ▸ opens that run. *Compare decisions*
+  puts two runs of one task side by side, aligned by their command sequences, so you can
+  see where they diverged and whether that was before or after the point of no return.
+- **Take the task yourself** — the six tasks on the models' terms, plus a *quick try* of
+  task 1 at the end of the list: three or four choices instead of the full catalog, about
+  two minutes, and marked as a try rather than a result. A progress strip under the
+  header shows how much of the task is left, *play out with no further action* runs the
+  remaining time out in seconds (useful for a demo when you already know the answer), and
+  *back to tasks* leaves at any moment without recording a result.
+
+Your own result can be added to the results table under an experiment name, and is scored
+by the same function as the published rows. It is kept in your browser only, marked as
+yours, and deletable; a quick try and a hand-stopped task are marked and left out of the
+mean.
+
+The table keeps three categories apart: the published matrix, runs you measured yourself
+(`results/user/`), and runs played in this browser.
 
 ## Documentation
 

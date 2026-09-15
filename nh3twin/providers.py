@@ -86,9 +86,10 @@ class OpenRouterPolicy(ClaudeCLIPolicy):
     def __init__(self, model, api_key=None, base_url=OPENROUTER_URL,
                  history=14, timeout=240, retries=2, trace_path=None,
                  label=None, verbose=False, temperature=None,
-                 max_tokens=None, extra_body=None):
+                 max_tokens=None, extra_body=None, prompt_lang="ru"):
         # Родительский конструктор не вызывается: он готовит файл системного
         # промпта для CLI, а здесь системная часть идёт в теле запроса.
+        self.prompt_lang = prompt_lang
         self.verbose = verbose
         self.model = model
         self.history = history
@@ -103,7 +104,7 @@ class OpenRouterPolicy(ClaudeCLIPolicy):
         self.temperature = temperature
         self.max_tokens = max_tokens
         self.extra_body = extra_body or {}
-        self._system = system_prompt()
+        self._system = system_prompt(prompt_lang)
         # Режим учёта выясняется по первому же ответу и далее только
         # уточняется: заявлять его заранее нельзя, он зависит от провайдера.
         self.token_accounting = None
@@ -200,7 +201,14 @@ class OpenRouterPolicy(ClaudeCLIPolicy):
         # протоколе, иначе Inspect покажет решение без его обоснования.
         think = msg.get("reasoning") or ""
         if think:
-            text = f"[рассуждение]\n{think}\n\n[ответ]\n{text}"
+            # Пометки разделов ставим мы, а не модель, поэтому они идут на
+            # языке задания: в англоязычном треке протокол не должен быть
+            # полурусским. Текст самой модели не трогается.
+            if getattr(self, "prompt_lang", "ru") == "en":
+                head, body = "[reasoning]", "[answer]"
+            else:
+                head, body = "[рассуждение]", "[ответ]"
+            text = f"{head}\n{think}\n\n{body}\n{text}"
 
         usage = j.get("usage") or {}
         tokens, mode = self._deliberation_tokens(usage)
@@ -226,7 +234,8 @@ PROVIDERS = ("claude-cli", "openrouter")
 
 def make_policy(provider, model, *, cli=DEFAULT_CLI, history=14, timeout=240,
                 trace_path=None, label=None, verbose=False, retries=None,
-                base_url=None, temperature=None, max_tokens=None):
+                base_url=None, temperature=None, max_tokens=None,
+                prompt_lang="ru"):
     """
     Политика по имени провайдера.
 
@@ -238,6 +247,7 @@ def make_policy(provider, model, *, cli=DEFAULT_CLI, history=14, timeout=240,
         return ClaudeCLIPolicy(
             model=model, cli=cli, history=history, timeout=timeout,
             trace_path=trace_path, label=label, verbose=verbose,
+            **({"prompt_lang": prompt_lang} if prompt_lang != "ru" else {}),
             **({"retries": retries} if retries is not None else {}))
     if provider == "openrouter":
         return OpenRouterPolicy(
@@ -245,7 +255,8 @@ def make_policy(provider, model, *, cli=DEFAULT_CLI, history=14, timeout=240,
             trace_path=trace_path, label=label, verbose=verbose,
             retries=2 if retries is None else retries,
             base_url=base_url or OPENROUTER_URL,
-            temperature=temperature, max_tokens=max_tokens)
+            temperature=temperature, max_tokens=max_tokens,
+            prompt_lang=prompt_lang)
     raise ValueError(f"неизвестный провайдер {provider!r}; "
                      f"известны: {', '.join(PROVIDERS)}")
 
