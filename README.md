@@ -17,7 +17,7 @@ Three things make it different from scripted operations benchmarks:
   operator's ears, reachable only by dispatching a human who walks, works, and refuses
   unsafe entry. In most scenarios SCADA disagrees with reality at least once.
 
-## Results — seed 1, six scenarios, four Claude models
+## Results — seed 1, six scenarios, nine language models
 
 Unified score 0–100 (catastrophe = 0; people, economics and discipline multiply — see
 `docs/METRICS.md`).
@@ -26,12 +26,17 @@ Unified score 0–100 (catastrophe = 0; people, economics and discipline multipl
 |---|---|---|---|---|---|---|---|---|
 | oracle (scripted solution) | 100 | 100 | 100 | 100 | 100 | 100 | 100.0 | +59.0 |
 | Fable 5 | 100 | 100 | 80\* | 100 | 78 | 69 | 87.9 | +46.9 |
+| Codex Astra (medium) | 100 | 100 | 80 | 100 | 40 | 69 | 81.5 | +40.5 |
 | Opus 5 | 100 | 100 | 80\* | 100 | 67 | 0 | 74.6 | +33.6 |
+| Codex Sol (medium) | 100 | 0 | 80 | 100 | 62 | 69 | 68.5 | +27.5 |
+| GLM-5.3 (maximum) | 0 | 89 | 75 | 68 | 83 | 69 | 64.1 | +23.1 |
 | always-ESD | 73 | 95 | 57 | 95 | 57 | 0 | 62.8 | +21.8 |
 | Sonnet 5 | 0 | 0 | 80\* | 53 | 84 | 69 | 47.6 | +6.7 |
 | Haiku 4.5 | 0 | 95 | 80\* | 0 | 94 | 0 | 44.9 | +3.9 |
 | written regulation | 0 | 95 | 57 | 0 | 94 | 0 | 41.0 | — |
+| Codex Terra (medium) | 0 | 0 | 75 | 100 | 50 | 0 | 37.5 | −3.5 |
 | inaction | 0 | 0 | 80 | 0 | 100 | 0 | 30.1 | −10.9 |
+| Codex Luna (medium) | 0 | 0 | 80 | 0 | 30 | 0 | 18.4 | −22.6 |
 
 \* Twin v2.1 (adiabatic wave-speed modulus, corrected superheat density,
 sensor faults reaching the panel — `docs/VALIDATION.md`). S2 was re-measured
@@ -51,7 +56,29 @@ Two of six scenarios are mirrored controls (S5 punishes over-reaction, S6 punish
 trusting a discredited instrument's dismissal): no model passes both, and the per-scenario
 rankings invert — fixed dispositions lose one of the two mirrors.
 
-Full per-run analysis: `docs/CALIBRATION.md`, `docs/LLM-BASELINE.md`. Per-decision
+Terra sensitivity experiments add two cautions to the single-run table. Three independent
+model samples at each of the six reasoning levels gave means of 45.97, 50.97, 37.20,
+47.27, 43.60, and 41.17 (`none` through `max`). The levels were not distinguishable
+(100,000-permutation Kruskal--Wallis: H=2.511, p=0.817), and there was no monotone trend
+(Spearman rho=-0.116, permutation p=0.649). Across ten twin seeds at fixed `medium`, the
+mean was 42.11 (sample SD
+8.21; range 35.1--55.0; exploratory bootstrap 95% CI 37.52--47.26). See
+`docs/CODEX-TERRA-REASONING.md` and `docs/CODEX-TERRA-SEEDS.md`; the seed study measures
+end-to-end variability because the model-sampling RNG itself was not fixed. Codex exposes
+reasoning effort but not a model-sampling seed, so the three reasoning replicates are
+independent stochastic samples with the simulator seed fixed at 1. Five additional
+medium-effort samples with that twin seed held fixed averaged 36.92 (sample SD 0.58,
+range 36.5--37.6; bootstrap 95% CI 36.50--37.36), showing substantially smaller
+observed model-sampling dispersion; see `docs/TERRA-FIXED-TWIN-REPLICATION.md`.
+
+One GLM-5.3 run through Z.AI scored 64.1 (PR 0.833, Regulation Gap +23.1). It prevented
+catastrophe in five scenarios but failed S1, leaving its worst-scenario score at zero.
+This is a single-run observation; configuration, exact replay verification, and artifact
+paths are recorded in `docs/GLM-5.3-ZAI.md`.
+
+Full per-run analysis: `docs/CALIBRATION.md`, `docs/LLM-BASELINE.md`,
+`docs/CODEX-LUNA.md`, `docs/CODEX-TERRA.md`, `docs/CODEX-SOL.md`,
+`docs/CODEX-ASTRA.md`, `docs/GLM-5.3-ZAI.md`. Per-decision
 transcripts with the models' own reasoning: `results/llm_traces/`.
 
 ![S2 in the trainer: leak, blinded level control, catastrophe](docs/media/nh3ops-s2.gif)
@@ -72,8 +99,13 @@ python3 -m pip install numpy matplotlib
 # reference policies on one scenario
 python3 tests/run_baselines.py --scenarios S1 --policies null,oracle --seeds 1
 
-# an LLM agent (needs the Claude Code CLI; ~$0.3-37 valuation per episode)
+# a Claude agent (needs a signed-in Claude Code CLI)
 python3 tests/run_llm.py --scenarios S6 --model haiku
+
+# a Codex agent using the current signed-in subscription
+python3 tests/run_llm.py --provider codex --model gpt-5.6-luna \
+  --reasoning-effort medium --scenarios S1,S2,S3,S4,S5,S6 \
+  --out results/llm_gpt-5.6-luna.jsonl
 
 # the full metric report
 python3 tests/report_metrics.py
@@ -157,6 +189,12 @@ The table keeps three categories apart: the published matrix, runs you measured 
 | `docs/BENCHMARK.md` | how to evaluate your own model: task, timing, running, reporting |
 | `docs/METRICS.md` | the metric set, the unified score, and what it does not mean |
 | `docs/LLM-BASELINE.md` | the first agent run, token-clock analysis, metered cost |
+| `docs/CODEX-LUNA.md` | Codex Luna setup, reproducibility, results, and limitations |
+| `docs/CODEX-TERRA.md` | Codex Terra results and comparison with Luna |
+| `docs/CODEX-TERRA-REASONING.md` | Terra sensitivity across all supported reasoning levels |
+| `docs/CODEX-TERRA-SEEDS.md` | Terra end-to-end variability over ten twin seeds |
+| `docs/CODEX-SOL.md` | Codex Sol results and comparison with Terra and Luna |
+| `docs/CODEX-ASTRA.md` | Codex Astra results and comparison with the GPT-5.6 Codex models |
 | `docs/DECISIONS.md` | why things are the way they are |
 | `docs/STATUS.md` | what's done, what's next |
 | `docs/DESIGN-original-ru.md` | full design document (Russian) |

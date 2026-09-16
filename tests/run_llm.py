@@ -1,7 +1,12 @@
 """
 Прогон языковой модели по сценариям бенчмарка.
 
-    python3 tests/run_llm.py --scenarios S1,S2,S3,S4,S5 --model haiku
+    # Claude Code (saved subscription session)
+    python3 tests/run_llm.py --scenarios S1,S2,S3,S4,S5,S6 --model haiku
+
+    # Codex CLI (saved subscription session)
+    python3 tests/run_llm.py --provider codex --model gpt-5.6-luna \
+        --reasoning-effort medium --scenarios S1,S2,S3,S4,S5,S6
 
 Результат построчно дописывается в results/llm.jsonl (кэш по ключу
 сценарий/политика/сид, как у эталонных политик), пошаговый протокол с
@@ -59,7 +64,7 @@ def _commit() -> str:
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--scenarios", default="S1,S2,S3,S4,S5")
+    ap.add_argument("--scenarios", default="S1,S2,S3,S4,S5,S6")
     ap.add_argument("--model", default="haiku")
     # Провайдер по умолчанию -- тот, которым получены опубликованные прогоны:
     # прежняя команда должна воспроизводиться дословно.
@@ -68,11 +73,13 @@ def main():
                     help="переопределить адрес API провайдера")
     ap.add_argument("--temperature", type=float, default=None)
     ap.add_argument("--max-tokens", type=int, default=None)
+    ap.add_argument("--reasoning-effort", default="medium",
+                    choices=("none", "low", "medium", "high", "xhigh", "max"))
     ap.add_argument("--seeds", default="1")
     ap.add_argument("--history", type=int, default=14,
                     help="сколько последних действий показывать модели")
     ap.add_argument("--timeout", type=int, default=240)
-    ap.add_argument("--cli", default=DEFAULT_CLI)
+    ap.add_argument("--cli", default="")
     ap.add_argument("--tag", default="", help="суффикс имени политики")
     ap.add_argument("--out", default=os.path.join(OUT_DIR, "llm.jsonl"))
     # Пробные прогоны не должны смешиваться с опубликованными протоколами:
@@ -117,7 +124,8 @@ def main():
                                   base_url=args.base_url or None,
                                   temperature=args.temperature,
                                   max_tokens=args.max_tokens,
-                                  prompt_lang=args.prompt_lang)
+                                  prompt_lang=args.prompt_lang,
+                                  reasoning_effort=args.reasoning_effort)
                 r = ep.run(pol)
                 r["policy"] = pol_name
                 seg = ep.plant.segments.get("EV-03")
@@ -135,6 +143,9 @@ def main():
                 r["llm"] = vars(pol.stats)
                 r["llm"]["model"] = args.model
                 r["llm"]["history"] = args.history
+                r["llm"]["reasoning_effort"] = (
+                    args.reasoning_effort
+                    if args.provider in {"codex", "zai"} else None)
                 r["llm"]["tokens_per_decision"] = (
                     round(pol.stats.out_tokens / max(pol.stats.calls, 1), 1))
                 # Паспорт прогона. Без него строку таблицы невозможно

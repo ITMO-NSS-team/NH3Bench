@@ -28,7 +28,8 @@ import json
 import os
 import time
 
-from .llm_policy import ClaudeCLIPolicy, DEFAULT_CLI, system_prompt
+from .llm_policy import (ClaudeCLIPolicy, CodexCLIPolicy, ZAIChatPolicy,
+                         DEFAULT_CLI, DEFAULT_CODEX_CLI, system_prompt)
 
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
@@ -229,13 +230,13 @@ class OpenRouterPolicy(ClaudeCLIPolicy):
 # Фабрика
 # =========================================================================
 
-PROVIDERS = ("claude-cli", "openrouter")
+PROVIDERS = ("claude-cli", "openrouter", "codex", "zai")
 
 
 def make_policy(provider, model, *, cli=DEFAULT_CLI, history=14, timeout=240,
                 trace_path=None, label=None, verbose=False, retries=None,
                 base_url=None, temperature=None, max_tokens=None,
-                prompt_lang="ru"):
+                prompt_lang="ru", reasoning_effort="medium"):
     """
     Политика по имени провайдера.
 
@@ -257,6 +258,18 @@ def make_policy(provider, model, *, cli=DEFAULT_CLI, history=14, timeout=240,
             base_url=base_url or OPENROUTER_URL,
             temperature=temperature, max_tokens=max_tokens,
             prompt_lang=prompt_lang)
+    if provider == "codex":
+        return CodexCLIPolicy(
+            model=model, cli=cli or DEFAULT_CODEX_CLI, history=history,
+            timeout=timeout, trace_path=trace_path, label=label,
+            verbose=verbose, reasoning_effort=reasoning_effort,
+            **({"retries": retries} if retries is not None else {}))
+    if provider == "zai":
+        return ZAIChatPolicy(
+            model=model, history=history, timeout=timeout,
+            trace_path=trace_path, label=label, verbose=verbose,
+            reasoning_effort=reasoning_effort,
+            **({"retries": retries} if retries is not None else {}))
     raise ValueError(f"неизвестный провайдер {provider!r}; "
                      f"известны: {', '.join(PROVIDERS)}")
 

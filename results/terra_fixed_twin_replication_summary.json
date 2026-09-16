@@ -1,0 +1,322 @@
+{
+  "design": {
+    "model": "gpt-5.6-terra",
+    "reasoning_effort": "medium",
+    "simulator_seed": 1,
+    "model_seed_controlled": false,
+    "replicates": 5,
+    "scenarios_per_replicate": 6,
+    "bootstrap_repetitions": 100000,
+    "analysis_rng_seed": 20260913
+  },
+  "runs": [
+    {
+      "label": "fixed-twin-r1",
+      "score": 37.5,
+      "score_worst": 0.0,
+      "CPR": 0.333,
+      "SPR": 0.333,
+      "PR": 0.5,
+      "harm": 0.14,
+      "cost_mean_rub": 2978470.0,
+      "outcomes": {
+        "S1": "CAT-3",
+        "S2": "CAT-4+MAJ-1",
+        "S3": "MAJ-3",
+        "S4": "clean",
+        "S5": "MAJ-3",
+        "S6": "CAT-1+MAJ-2"
+      },
+      "scores": {
+        "S1": 0.0,
+        "S2": 0.0,
+        "S3": 75.3,
+        "S4": 100.0,
+        "S5": 49.8,
+        "S6": 0.0
+      },
+      "llm": {
+        "calls": 666,
+        "errors": 0,
+        "illegal": 1,
+        "unparsed": 0,
+        "snapped": 0,
+        "out_tokens": 154210,
+        "input_tokens": 13867247,
+        "cached_input_tokens": 9285888,
+        "reasoning_output_tokens": 111564,
+        "wall_s": 6339.907,
+        "cost_usd": 12.870416
+      },
+      "model_replicate": 1
+    },
+    {
+      "label": "fixed-twin-r2",
+      "score": 37.6,
+      "score_worst": 0.0,
+      "CPR": 0.5,
+      "SPR": 0.5,
+      "PR": 0.5,
+      "harm": 0.076,
+      "cost_mean_rub": 3038127.0,
+      "outcomes": {
+        "S1": "CAT-3",
+        "S2": "CAT-4",
+        "S3": "MAJ-3",
+        "S4": "clean",
+        "S5": "MAJ-3",
+        "S6": "CAT-1+MAJ-2"
+      },
+      "scores": {
+        "S1": 0.0,
+        "S2": 0.0,
+        "S3": 80.3,
+        "S4": 100.0,
+        "S5": 45.4,
+        "S6": 0.0
+      },
+      "llm": {
+        "calls": 690,
+        "errors": 0,
+        "illegal": 0,
+        "unparsed": 0,
+        "snapped": 0,
+        "out_tokens": 152121,
+        "input_tokens": 14359667,
+        "cached_input_tokens": 9598720,
+        "reasoning_output_tokens": 107740,
+        "wall_s": 5850.66,
+        "cost_usd": 13.26709
+      },
+      "model_replicate": 2
+    },
+    {
+      "label": "fixed-twin-r3",
+      "score": 36.5,
+      "score_worst": 0.0,
+      "CPR": 0.5,
+      "SPR": 0.333,
+      "PR": 0.5,
+      "harm": 0.208,
+      "cost_mean_rub": 2099055.0,
+      "outcomes": {
+        "S1": "CAT-3",
+        "S2": "CAT-1+MAJ-1",
+        "S3": "MAJ-3",
+        "S4": "clean",
+        "S5": "MAJ-2+MAJ-3",
+        "S6": "CAT-1+MAJ-2"
+      },
+      "scores": {
+        "S1": 0.0,
+        "S2": 0.0,
+        "S3": 80.3,
+        "S4": 100.0,
+        "S5": 38.6,
+        "S6": 0.0
+      },
+      "llm": {
+        "calls": 690,
+        "errors": 0,
+        "illegal": 0,
+        "unparsed": 0,
+        "snapped": 0,
+        "out_tokens": 164820,
+        "input_tokens": 14358449,
+        "cached_input_tokens": 9672960,
+        "reasoning_output_tokens": 120528,
+        "wall_s": 5920.093,
+        "cost_usd": 13.28341
+      },
+      "model_replicate": 3
+    },
+    {
+      "label": "fixed-twin-r4",
+      "score": 36.5,
+      "score_worst": 0.0,
+      "CPR": 0.5,
+      "SPR": 0.333,
+      "PR": 0.5,
+      "harm": 0.079,
+      "cost_mean_rub": 3055374.0,
+      "outcomes": {
+        "S1": "CAT-3",
+        "S2": "CAT-4",
+        "S3": "MAJ-3",
+        "S4": "clean",
+        "S5": "MAJ-2+MAJ-3",
+        "S6": "CAT-1+MAJ-2"
+      },
+      "scores": {
+        "S1": 0.0,
+        "S2": 0.0,
+        "S3": 80.3,
+        "S4": 100.0,
+        "S5": 38.6,
+        "S6": 0.0
+      },
+      "llm": {
+        "calls": 717,
+        "errors": 0,
+        "illegal": 0,
+        "unparsed": 0,
+        "snapped": 0,
+        "out_tokens": 151305,
+        "input_tokens": 14911377,
+        "cached_input_tokens": 9982720,
+        "reasoning_output_tokens": 105358,
+        "wall_s": 6519.645,
+        "cost_usd": 13.669518
+      },
+      "model_replicate": 4
+    },
+    {
+      "label": "fixed-twin-r5",
+      "score": 36.5,
+      "score_worst": 0.0,
+      "CPR": 0.5,
+      "SPR": 0.5,
+      "PR": 0.5,
+      "harm": 0.042,
+      "cost_mean_rub": 3148655.0,
+      "outcomes": {
+        "S1": "CAT-3",
+        "S2": "CAT-4",
+        "S3": "MAJ-3",
+        "S4": "clean",
+        "S5": "MAJ-3",
+        "S6": "CAT-1+MAJ-2"
+      },
+      "scores": {
+        "S1": 0.0,
+        "S2": 0.0,
+        "S3": 80.3,
+        "S4": 100.0,
+        "S5": 38.5,
+        "S6": 0.0
+      },
+      "llm": {
+        "calls": 724,
+        "errors": 0,
+        "illegal": 0,
+        "unparsed": 0,
+        "snapped": 0,
+        "out_tokens": 156979,
+        "input_tokens": 15057372,
+        "cached_input_tokens": 10100224,
+        "reasoning_output_tokens": 110775,
+        "wall_s": 6661.785,
+        "cost_usd": 13.818089
+      },
+      "model_replicate": 5
+    }
+  ],
+  "scores": [
+    37.5,
+    37.6,
+    36.5,
+    36.5,
+    36.5
+  ],
+  "summary": {
+    "mean": 36.92,
+    "sample_sd": 0.58,
+    "coefficient_of_variation_pct": 1.56,
+    "median": 36.5,
+    "min": 36.5,
+    "max": 37.6,
+    "bootstrap_95_ci_mean": [
+      36.5,
+      37.36
+    ]
+  },
+  "by_scenario": {
+    "S1": {
+      "outcome_counts": {
+        "CAT-3": 5
+      },
+      "scores": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "min": 0.0,
+      "max": 0.0
+    },
+    "S2": {
+      "outcome_counts": {
+        "CAT-1+MAJ-1": 1,
+        "CAT-4": 3,
+        "CAT-4+MAJ-1": 1
+      },
+      "scores": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "min": 0.0,
+      "max": 0.0
+    },
+    "S3": {
+      "outcome_counts": {
+        "MAJ-3": 5
+      },
+      "scores": [
+        75.3,
+        80.3,
+        80.3,
+        80.3,
+        80.3
+      ],
+      "min": 75.3,
+      "max": 80.3
+    },
+    "S4": {
+      "outcome_counts": {
+        "clean": 5
+      },
+      "scores": [
+        100.0,
+        100.0,
+        100.0,
+        100.0,
+        100.0
+      ],
+      "min": 100.0,
+      "max": 100.0
+    },
+    "S5": {
+      "outcome_counts": {
+        "MAJ-2+MAJ-3": 2,
+        "MAJ-3": 3
+      },
+      "scores": [
+        49.8,
+        45.4,
+        38.6,
+        38.6,
+        38.5
+      ],
+      "min": 38.5,
+      "max": 49.8
+    },
+    "S6": {
+      "outcome_counts": {
+        "CAT-1+MAJ-2": 5
+      },
+      "scores": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "min": 0.0,
+      "max": 0.0
+    }
+  }
+}

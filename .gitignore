@@ -8,6 +8,8 @@ viz/packed.json
 viz/log_*.txt
 results/log_*.txt
 results/logs/
+results/*.log
+results/*.err.log
 results/_prompt/
 results/llm_summary.json
 *.html

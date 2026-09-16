@@ -36,10 +36,15 @@
 from __future__ import annotations
 
 import json
+import http.client
 import os
 import re
+import shutil
 import subprocess
+import tempfile
 import time
+import urllib.error
+import urllib.request
 from dataclasses import dataclass, field
 
 from .actions import CATALOG
@@ -51,6 +56,9 @@ DEFAULT_CLI = os.environ.get(
     "NH3_CLAUDE_CLI",
     os.path.expanduser("~/.local/bin/claude.exe" if os.name == "nt"
                        else "~/.local/bin/claude"))
+
+DEFAULT_CODEX_CLI = os.environ.get(
+    "NH3_CODEX_CLI", shutil.which("codex") or shutil.which("codex.cmd") or "codex")
 
 # Инструменты Claude Code агенту не нужны: он должен только рассуждать и
 # называть действие. Открытый доступ к файловой системе позволил бы ему
@@ -238,6 +246,13 @@ class LLMStats:
     out_tokens: int = 0
     wall_s: float = 0.0
     cost_usd: float = 0.0
+    input_tokens: int = 0
+    cached_input_tokens: int = 0
+    reasoning_output_tokens: int = 0
+    tool_calls: int = 0
+    provider: str = ""
+    auth_mode: str = ""
+    cost_basis: str = ""
 
 
 class ClaudeCLIPolicy(Policy):
@@ -367,6 +382,212 @@ class ClaudeCLIPolicy(Policy):
                "reply": text, "obs": obs.render()}
         with open(self.trace_path, "a", encoding="utf-8") as f:
             f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+
+
+class CodexCLIPolicy(ClaudeCLIPolicy):
+    """Language-model policy backed by ``codex exec`` and saved account auth.
+
+    Every decision is a fresh ephemeral CLI run.  Codex is rooted in an empty,
+    read-only temporary directory and its optional tools/features are disabled
+    so the model cannot inspect the benchmark implementation.  The benchmark's
+    fixed role/catalog prompt is prepended to the per-step observation because
+    ``codex exec`` has no system-prompt-file flag.
+    """
+
+    _DISABLED_FEATURES = (
+        "plugins", "apps", "browser_use", "computer_use", "image_generation",
+        "skill_search", "shell_tool", "unified_exec",
+    )
+    _API_PRICES_PER_MTOK = {
+        "gpt-5.6-luna": {"input": 0.20, "cached_input": 0.02, "output": 1.20},
+        "gpt-5.6-terra": {"input": 2.00, "cached_input": 0.20, "output": 12.00},
+        "gpt-5.6-sol": {"input": 4.00, "cached_input": 0.40, "output": 20.00},
+        "gpt-6-astra": {"input": 10.00, "cached_input": 1.00, "output": 50.00},
+    }
+
+    def __init__(self, model="gpt-5.6-luna", cli=DEFAULT_CODEX_CLI, history=14,
+                 timeout=240, retries=1, trace_path=None, sysfile=None,
+                 label=None, verbose=False, reasoning_effort="medium"):
+        super().__init__(model=model, cli=cli, history=history, timeout=timeout,
+                         retries=retries, trace_path=trace_path, sysfile=sysfile,
+                         label=label, verbose=verbose)
+        self.reasoning_effort = reasoning_effort
+        self._workdir_ctx = tempfile.TemporaryDirectory(prefix="nh3bench-codex-")
+        self.workdir = self._workdir_ctx.name
+        self.stats.provider = "codex-cli"
+        self.stats.auth_mode = "saved-account"
+        self.stats.cost_basis = (
+            "api-list-equivalent"
+            if model in self._API_PRICES_PER_MTOK else "unavailable")
+
+    @staticmethod
+    def _parse_events(stdout: str) -> tuple:
+        text = ""
+        usage = {}
+        tool_calls = 0
+        errors = []
+        for line in stdout.splitlines():
+            if not line.strip():
+                continue
+            try:
+                event = json.loads(line)
+            except json.JSONDecodeError:
+                errors.append(f"bad event: {line[-120:]}")
+                continue
+            etype = event.get("type")
+            item = event.get("item") or {}
+            if etype == "item.completed" and item.get("type") == "agent_message":
+                text = item.get("text") or text
+            elif etype == "item.completed" and item.get("type") in {
+                    "command_execution", "mcp_tool_call", "web_search"}:
+                tool_calls += 1
+            elif etype == "turn.completed":
+                usage = event.get("usage") or {}
+            elif etype in {"turn.failed", "error"}:
+                errors.append(str(event.get("error") or event.get("message") or event))
+        return text, usage, tool_calls, errors
+
+    def _call(self, prompt: str) -> tuple:
+        with open(self.sysfile, encoding="utf-8") as f:
+            fixed = f.read()
+        full_prompt = (
+            fixed
+            + "\n\nТЕКУЩАЯ СИТУАЦИЯ\n\n"
+            + prompt
+            + "\n\nНе используй инструменты, файлы, веб-поиск или внешние знания о "
+              "NH3Bench. Решение должно опираться только на текст выше."
+        )
+        cmd = [
+            self.cli, "exec", "-",
+            "--model", self.model,
+            "--json", "--ephemeral",
+            "--ignore-user-config", "--ignore-rules",
+            "--sandbox", "read-only", "--skip-git-repo-check",
+            "-c", f'model_reasoning_effort="{self.reasoning_effort}"',
+            "-C", self.workdir,
+        ]
+        for feature in self._DISABLED_FEATURES:
+            cmd.extend(("--disable", feature))
+        try:
+            pr = subprocess.run(cmd, input=full_prompt, capture_output=True,
+                                text=True, encoding="utf-8", errors="replace",
+                                timeout=self.timeout, cwd=self.workdir)
+        except subprocess.TimeoutExpired:
+            return "", 0, 0.0, "timeout"
+        if pr.returncode != 0:
+            return "", 0, 0.0, f"rc={pr.returncode}: {(pr.stderr or '')[-300:]}"
+
+        text, usage, tool_calls, errors = self._parse_events(pr.stdout)
+        if errors and not text:
+            return "", 0, 0.0, "; ".join(errors)[-300:]
+        if not text:
+            return "", 0, 0.0, "no agent message in Codex JSONL"
+
+        input_tokens = int(usage.get("input_tokens") or 0)
+        cached_tokens = int(usage.get("cached_input_tokens") or 0)
+        output_tokens = int(usage.get("output_tokens") or 0)
+        reasoning_tokens = int(usage.get("reasoning_output_tokens") or 0)
+        self.stats.input_tokens += input_tokens
+        self.stats.cached_input_tokens += cached_tokens
+        self.stats.reasoning_output_tokens += reasoning_tokens
+        self.stats.tool_calls += tool_calls
+
+        # The run uses the user's Codex subscription.  This is the equivalent
+        # API list-price valuation, not an amount billed to the subscription.
+        price = self._API_PRICES_PER_MTOK.get(self.model)
+        list_cost = 0.0
+        if price is not None:
+            uncached_tokens = max(input_tokens - cached_tokens, 0)
+            list_cost = (uncached_tokens * price["input"]
+                         + cached_tokens * price["cached_input"]
+                         + output_tokens * price["output"]) / 1_000_000
+        if tool_calls:
+            return text, output_tokens, list_cost, f"unexpected tool calls: {tool_calls}"
+        return text, output_tokens, list_cost, None
+
+
+class ZAIChatPolicy(ClaudeCLIPolicy):
+    """Language-model policy using Z.AI's OpenAI-compatible HTTP endpoint.
+
+    The API key is read only from ``ZAI_API_KEY``.  It is never written to a
+    trace or passed on a command line.  The Coding Plan endpoint is used by
+    default; ``ZAI_BASE_URL`` can override it for an explicitly configured
+    compatible deployment.
+    """
+
+    DEFAULT_BASE_URL = "https://api.z.ai/api/coding/paas/v4"
+
+    def __init__(self, model="glm-5.3", history=14, timeout=240, retries=1,
+                 trace_path=None, sysfile=None, label=None, verbose=False,
+                 reasoning_effort="max"):
+        super().__init__(model=model, history=history, timeout=timeout,
+                         retries=retries, trace_path=trace_path,
+                         sysfile=sysfile, label=label, verbose=verbose)
+        self.reasoning_effort = reasoning_effort
+        self.api_key = os.environ.get("ZAI_API_KEY", "")
+        if not self.api_key:
+            raise RuntimeError("ZAI_API_KEY is not set")
+        self.base_url = os.environ.get(
+            "ZAI_BASE_URL", self.DEFAULT_BASE_URL).rstrip("/")
+        self.stats.provider = "zai-openai-compatible"
+        self.stats.auth_mode = "api-key-environment"
+        self.stats.cost_basis = "subscription-quota"
+
+    def _call(self, prompt: str) -> tuple:
+        with open(self.sysfile, encoding="utf-8") as f:
+            fixed = f.read()
+        payload = {
+            "model": self.model,
+            "messages": [
+                {"role": "system", "content": fixed},
+                {"role": "user", "content": prompt},
+            ],
+            "stream": False,
+            "temperature": 1.0,
+            "thinking": {"type": "enabled"},
+            "reasoning_effort": self.reasoning_effort,
+        }
+        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        req = urllib.request.Request(
+            self.base_url + "/chat/completions",
+            data=body,
+            headers={
+                "Authorization": "Bearer " + self.api_key,
+                "Content-Type": "application/json",
+                "Accept-Language": "en-US,en",
+                "User-Agent": "NH3Bench/1.0",
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=self.timeout) as response:
+                raw = response.read().decode("utf-8", errors="replace")
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="replace")[-300:]
+            return "", 0, 0.0, f"http {exc.code}: {detail}"
+        except (urllib.error.URLError, TimeoutError, ConnectionError,
+                http.client.HTTPException, OSError) as exc:
+            return "", 0, 0.0, f"network: {str(exc)[-300:]}"
+        try:
+            result = json.loads(raw)
+            choice = (result.get("choices") or [])[0]
+            message = choice.get("message") or {}
+            text = message.get("content") or ""
+            usage = result.get("usage") or {}
+        except (json.JSONDecodeError, IndexError, KeyError, TypeError):
+            return "", 0, 0.0, f"bad response: {raw[-300:]}"
+        if not text:
+            return "", 0, 0.0, "no assistant content in Z.AI response"
+
+        input_tokens = int(usage.get("prompt_tokens") or 0)
+        output_tokens = int(usage.get("completion_tokens") or 0)
+        cached_tokens = int(
+            (usage.get("prompt_tokens_details") or {}).get("cached_tokens") or 0)
+        self.stats.input_tokens += input_tokens
+        self.stats.cached_input_tokens += cached_tokens
+        # Z.AI reports visible and reasoning output together as completion tokens.
+        self.stats.reasoning_output_tokens += 0
+        return text, output_tokens, 0.0, None
 
 
 # =========================================================================

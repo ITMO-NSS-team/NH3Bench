@@ -1,0 +1,762 @@
+{
+  "design": {
+    "model": "gpt-5.6-terra",
+    "reasoning_levels": [
+      "none",
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max"
+    ],
+    "reasoning_seed": 1,
+    "seed_reasoning_level": "medium",
+    "seed_values": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10
+    ],
+    "scenarios": [
+      "S1",
+      "S2",
+      "S3",
+      "S4",
+      "S5",
+      "S6"
+    ],
+    "bootstrap_repetitions": 100000,
+    "bootstrap_rng_seed": 20260912
+  },
+  "reasoning": [
+    {
+      "label": "none",
+      "score": 55.3,
+      "score_worst": 0.0,
+      "CPR": 0.5,
+      "SPR": 0.5,
+      "PR": 0.667,
+      "harm": 0.176,
+      "cost_mean_rub": 1860331.0,
+      "outcomes": {
+        "S1": "CAT-3",
+        "S2": "clean",
+        "S3": "clean",
+        "S4": "clean",
+        "S5": "MAJ-3",
+        "S6": "CAT-1+MAJ-2"
+      },
+      "scores": {
+        "S1": 0.0,
+        "S2": 100.0,
+        "S3": 93.0,
+        "S4": 100.0,
+        "S5": 38.9,
+        "S6": 0.0
+      },
+      "llm": {
+        "calls": 934,
+        "errors": 0,
+        "illegal": 0,
+        "unparsed": 0,
+        "snapped": 0,
+        "out_tokens": 64046,
+        "input_tokens": 19436906,
+        "cached_input_tokens": 13017856,
+        "reasoning_output_tokens": 0,
+        "wall_s": 6217.524,
+        "cost_usd": 16.210223
+      }
+    },
+    {
+      "label": "low",
+      "score": 54.2,
+      "score_worst": 0.0,
+      "CPR": 0.5,
+      "SPR": 0.5,
+      "PR": 0.667,
+      "harm": 0.221,
+      "cost_mean_rub": 2142674.0,
+      "outcomes": {
+        "S1": "clean",
+        "S2": "CAT-4+MAJ-1",
+        "S3": "clean",
+        "S4": "clean",
+        "S5": "MAJ-3",
+        "S6": "CAT-1+MAJ-2"
+      },
+      "scores": {
+        "S1": 100.0,
+        "S2": 0.0,
+        "S3": 93.0,
+        "S4": 100.0,
+        "S5": 32.3,
+        "S6": 0.0
+      },
+      "llm": {
+        "calls": 809,
+        "errors": 0,
+        "illegal": 0,
+        "unparsed": 0,
+        "snapped": 0,
+        "out_tokens": 122938,
+        "input_tokens": 16832144,
+        "cached_input_tokens": 11224576,
+        "reasoning_output_tokens": 69512,
+        "wall_s": 6461.23,
+        "cost_usd": 14.935307
+      }
+    },
+    {
+      "label": "medium",
+      "score": 37.5,
+      "score_worst": 0.0,
+      "CPR": 0.333,
+      "SPR": 0.333,
+      "PR": 0.5,
+      "harm": 0.14,
+      "cost_mean_rub": 2978470.0,
+      "outcomes": {
+        "S1": "CAT-3",
+        "S2": "CAT-4+MAJ-1",
+        "S3": "MAJ-3",
+        "S4": "clean",
+        "S5": "MAJ-3",
+        "S6": "CAT-1+MAJ-2"
+      },
+      "scores": {
+        "S1": 0.0,
+        "S2": 0.0,
+        "S3": 75.3,
+        "S4": 100.0,
+        "S5": 49.8,
+        "S6": 0.0
+      },
+      "llm": {
+        "calls": 666,
+        "errors": 0,
+        "illegal": 1,
+        "unparsed": 0,
+        "snapped": 0,
+        "out_tokens": 154210,
+        "input_tokens": 13867247,
+        "cached_input_tokens": 9285888,
+        "reasoning_output_tokens": 111564,
+        "wall_s": 6339.907,
+        "cost_usd": 12.870416
+      }
+    },
+    {
+      "label": "high",
+      "score": 35.1,
+      "score_worst": 0.0,
+      "CPR": 0.5,
+      "SPR": 0.333,
+      "PR": 0.5,
+      "harm": 0.223,
+      "cost_mean_rub": 3461706.0,
+      "outcomes": {
+        "S1": "CAT-3",
+        "S2": "CAT-4+MAJ-1",
+        "S3": "MAJ-3",
+        "S4": "clean",
+        "S5": "MAJ-2+MAJ-3",
+        "S6": "CAT-1+MAJ-2"
+      },
+      "scores": {
+        "S1": 0.0,
+        "S2": 0.0,
+        "S3": 80.3,
+        "S4": 100.0,
+        "S5": 30.0,
+        "S6": 0.0
+      },
+      "llm": {
+        "calls": 661,
+        "errors": 0,
+        "illegal": 0,
+        "unparsed": 0,
+        "snapped": 0,
+        "out_tokens": 179086,
+        "input_tokens": 13748328,
+        "cached_input_tokens": 9081600,
+        "reasoning_output_tokens": 137582,
+        "wall_s": 5978.157,
+        "cost_usd": 13.298808
+      }
+    },
+    {
+      "label": "xhigh",
+      "score": 38.3,
+      "score_worst": 0.0,
+      "CPR": 0.5,
+      "SPR": 0.5,
+      "PR": 0.5,
+      "harm": 0.132,
+      "cost_mean_rub": 2013542.0,
+      "outcomes": {
+        "S1": "CAT-3",
+        "S2": "CAT-1+MAJ-1",
+        "S3": "MAJ-3",
+        "S4": "clean",
+        "S5": "MAJ-3",
+        "S6": "CAT-1+MAJ-2"
+      },
+      "scores": {
+        "S1": 0.0,
+        "S2": 0.0,
+        "S3": 80.3,
+        "S4": 100.0,
+        "S5": 49.7,
+        "S6": 0.0
+      },
+      "llm": {
+        "calls": 617,
+        "errors": 0,
+        "illegal": 0,
+        "unparsed": 0,
+        "snapped": 0,
+        "out_tokens": 225379,
+        "input_tokens": 12828365,
+        "cached_input_tokens": 8490240,
+        "reasoning_output_tokens": 186592,
+        "wall_s": 7243.251,
+        "cost_usd": 13.078846
+      }
+    },
+    {
+      "label": "max",
+      "score": 34.2,
+      "score_worst": 0.0,
+      "CPR": 0.333,
+      "SPR": 0.167,
+      "PR": 0.5,
+      "harm": 0.295,
+      "cost_mean_rub": 2396438.0,
+      "outcomes": {
+        "S1": "CAT-3",
+        "S2": "CAT-1+MAJ-1",
+        "S3": "MAJ-3",
+        "S4": "clean",
+        "S5": "MAJ-2+MAJ-3",
+        "S6": "CAT-1+MAJ-2"
+      },
+      "scores": {
+        "S1": 0.0,
+        "S2": 0.0,
+        "S3": 75.3,
+        "S4": 100.0,
+        "S5": 30.0,
+        "S6": 0.0
+      },
+      "llm": {
+        "calls": 340,
+        "errors": 0,
+        "illegal": 0,
+        "unparsed": 0,
+        "snapped": 0,
+        "out_tokens": 403061,
+        "input_tokens": 7073616,
+        "cached_input_tokens": 4561920,
+        "reasoning_output_tokens": 381748,
+        "wall_s": 8539.04,
+        "cost_usd": 10.772508
+      }
+    }
+  ],
+  "seeds": {
+    "by_seed": [
+      {
+        "label": "seed-1",
+        "score": 37.5,
+        "score_worst": 0.0,
+        "CPR": 0.333,
+        "SPR": 0.333,
+        "PR": 0.5,
+        "harm": 0.14,
+        "cost_mean_rub": 2978470.0,
+        "outcomes": {
+          "S1": "CAT-3",
+          "S2": "CAT-4+MAJ-1",
+          "S3": "MAJ-3",
+          "S4": "clean",
+          "S5": "MAJ-3",
+          "S6": "CAT-1+MAJ-2"
+        },
+        "scores": {
+          "S1": 0.0,
+          "S2": 0.0,
+          "S3": 75.3,
+          "S4": 100.0,
+          "S5": 49.8,
+          "S6": 0.0
+        },
+        "llm": {
+          "calls": 666,
+          "errors": 0,
+          "illegal": 1,
+          "unparsed": 0,
+          "snapped": 0,
+          "out_tokens": 154210,
+          "input_tokens": 13867247,
+          "cached_input_tokens": 9285888,
+          "reasoning_output_tokens": 111564,
+          "wall_s": 6339.907,
+          "cost_usd": 12.870416
+        },
+        "seed": 1
+      },
+      {
+        "label": "seed-2",
+        "score": 38.4,
+        "score_worst": 0.0,
+        "CPR": 0.5,
+        "SPR": 0.5,
+        "PR": 0.5,
+        "harm": 0.132,
+        "cost_mean_rub": 2010956.0,
+        "outcomes": {
+          "S1": "CAT-3",
+          "S2": "CAT-1+MAJ-1",
+          "S3": "MAJ-3",
+          "S4": "clean",
+          "S5": "MAJ-3",
+          "S6": "CAT-1+MAJ-2"
+        },
+        "scores": {
+          "S1": 0.0,
+          "S2": 0.0,
+          "S3": 80.3,
+          "S4": 100.0,
+          "S5": 49.8,
+          "S6": 0.0
+        },
+        "llm": {
+          "calls": 668,
+          "errors": 0,
+          "illegal": 2,
+          "unparsed": 0,
+          "snapped": 0,
+          "out_tokens": 155877,
+          "input_tokens": 13909414,
+          "cached_input_tokens": 9322752,
+          "reasoning_output_tokens": 112490,
+          "wall_s": 5509.616,
+          "cost_usd": 12.908398
+        },
+        "seed": 2
+      },
+      {
+        "label": "seed-3",
+        "score": 37.4,
+        "score_worst": 0.0,
+        "CPR": 0.5,
+        "SPR": 0.5,
+        "PR": 0.5,
+        "harm": 0.105,
+        "cost_mean_rub": 3066062.0,
+        "outcomes": {
+          "S1": "CAT-3",
+          "S2": "CAT-4+MAJ-1",
+          "S3": "MAJ-3",
+          "S4": "clean",
+          "S5": "MAJ-3",
+          "S6": "CAT-1+MAJ-2"
+        },
+        "scores": {
+          "S1": 0.0,
+          "S2": 0.0,
+          "S3": 80.3,
+          "S4": 100.0,
+          "S5": 44.3,
+          "S6": 0.0
+        },
+        "llm": {
+          "calls": 723,
+          "errors": 0,
+          "illegal": 0,
+          "unparsed": 0,
+          "snapped": 0,
+          "out_tokens": 152481,
+          "input_tokens": 15037108,
+          "cached_input_tokens": 10139392,
+          "reasoning_output_tokens": 106018,
+          "wall_s": 5772.794,
+          "cost_usd": 13.653082
+        },
+        "seed": 3
+      },
+      {
+        "label": "seed-4",
+        "score": 35.1,
+        "score_worst": 0.0,
+        "CPR": 0.5,
+        "SPR": 0.5,
+        "PR": 0.5,
+        "harm": 0.177,
+        "cost_mean_rub": 2413809.0,
+        "outcomes": {
+          "S1": "CAT-3",
+          "S2": "CAT-1+MAJ-1",
+          "S3": "MAJ-3",
+          "S4": "clean",
+          "S5": "MAJ-3",
+          "S6": "CAT-1+MAJ-2"
+        },
+        "scores": {
+          "S1": 0.0,
+          "S2": 0.0,
+          "S3": 80.3,
+          "S4": 100.0,
+          "S5": 30.0,
+          "S6": 0.0
+        },
+        "llm": {
+          "calls": 711,
+          "errors": 0,
+          "illegal": 1,
+          "unparsed": 0,
+          "snapped": 0,
+          "out_tokens": 155600,
+          "input_tokens": 14796670,
+          "cached_input_tokens": 9945344,
+          "reasoning_output_tokens": 109952,
+          "wall_s": 5712.668,
+          "cost_usd": 13.558921
+        },
+        "seed": 4
+      },
+      {
+        "label": "seed-5",
+        "score": 37.6,
+        "score_worst": 0.0,
+        "CPR": 0.333,
+        "SPR": 0.333,
+        "PR": 0.5,
+        "harm": 0.099,
+        "cost_mean_rub": 2958286.0,
+        "outcomes": {
+          "S1": "CAT-3",
+          "S2": "CAT-4",
+          "S3": "MAJ-3",
+          "S4": "clean",
+          "S5": "MAJ-3",
+          "S6": "CAT-1+MAJ-2"
+        },
+        "scores": {
+          "S1": 0.0,
+          "S2": 0.0,
+          "S3": 75.3,
+          "S4": 100.0,
+          "S5": 50.4,
+          "S6": 0.0
+        },
+        "llm": {
+          "calls": 699,
+          "errors": 0,
+          "illegal": 0,
+          "unparsed": 0,
+          "snapped": 0,
+          "out_tokens": 156314,
+          "input_tokens": 14535253,
+          "cached_input_tokens": 9765888,
+          "reasoning_output_tokens": 111270,
+          "wall_s": 5677.743,
+          "cost_usd": 13.367676
+        },
+        "seed": 5
+      },
+      {
+        "label": "seed-6",
+        "score": 35.2,
+        "score_worst": 0.0,
+        "CPR": 0.333,
+        "SPR": 0.167,
+        "PR": 0.5,
+        "harm": 0.174,
+        "cost_mean_rub": 3140599.0,
+        "outcomes": {
+          "S1": "CAT-3",
+          "S2": "CAT-4+MAJ-1",
+          "S3": "MAJ-3",
+          "S4": "clean",
+          "S5": "MAJ-2+MAJ-3",
+          "S6": "CAT-1+MAJ-2"
+        },
+        "scores": {
+          "S1": 0.0,
+          "S2": 0.0,
+          "S3": 75.3,
+          "S4": 100.0,
+          "S5": 35.8,
+          "S6": 0.0
+        },
+        "llm": {
+          "calls": 673,
+          "errors": 0,
+          "illegal": 2,
+          "unparsed": 0,
+          "snapped": 0,
+          "out_tokens": 149884,
+          "input_tokens": 14017271,
+          "cached_input_tokens": 9438464,
+          "reasoning_output_tokens": 106819,
+          "wall_s": 5489.163,
+          "cost_usd": 12.843915
+        },
+        "seed": 6
+      },
+      {
+        "label": "seed-7",
+        "score": 54.1,
+        "score_worst": 0.0,
+        "CPR": 0.5,
+        "SPR": 0.5,
+        "PR": 0.667,
+        "harm": 0.177,
+        "cost_mean_rub": 2006508.0,
+        "outcomes": {
+          "S1": "CAT-3",
+          "S2": "clean",
+          "S3": "MAJ-3",
+          "S4": "clean",
+          "S5": "MAJ-3",
+          "S6": "CAT-1+MAJ-2"
+        },
+        "scores": {
+          "S1": 0.0,
+          "S2": 100.0,
+          "S3": 75.3,
+          "S4": 100.0,
+          "S5": 49.5,
+          "S6": 0.0
+        },
+        "llm": {
+          "calls": 766,
+          "errors": 0,
+          "illegal": 0,
+          "unparsed": 0,
+          "snapped": 0,
+          "out_tokens": 167849,
+          "input_tokens": 15925016,
+          "cached_input_tokens": 10771200,
+          "reasoning_output_tokens": 119479,
+          "wall_s": 6252.446,
+          "cost_usd": 14.47606
+        },
+        "seed": 7
+      },
+      {
+        "label": "seed-8",
+        "score": 38.3,
+        "score_worst": 0.0,
+        "CPR": 0.5,
+        "SPR": 0.5,
+        "PR": 0.5,
+        "harm": 0.166,
+        "cost_mean_rub": 2013292.0,
+        "outcomes": {
+          "S1": "CAT-3",
+          "S2": "CAT-1+MAJ-1",
+          "S3": "MAJ-3",
+          "S4": "clean",
+          "S5": "MAJ-3",
+          "S6": "CAT-1+MAJ-2"
+        },
+        "scores": {
+          "S1": 0.0,
+          "S2": 0.0,
+          "S3": 80.3,
+          "S4": 100.0,
+          "S5": 49.7,
+          "S6": 0.0
+        },
+        "llm": {
+          "calls": 718,
+          "errors": 0,
+          "illegal": 0,
+          "unparsed": 0,
+          "snapped": 0,
+          "out_tokens": 159406,
+          "input_tokens": 14938098,
+          "cached_input_tokens": 10103296,
+          "reasoning_output_tokens": 114593,
+          "wall_s": 6034.7,
+          "cost_usd": 13.603135
+        },
+        "seed": 8
+      },
+      {
+        "label": "seed-9",
+        "score": 52.5,
+        "score_worst": 0.0,
+        "CPR": 0.5,
+        "SPR": 0.5,
+        "PR": 0.667,
+        "harm": 0.175,
+        "cost_mean_rub": 2266518.0,
+        "outcomes": {
+          "S1": "clean",
+          "S2": "CAT-4+MAJ-1",
+          "S3": "MAJ-3",
+          "S4": "clean",
+          "S5": "MAJ-3",
+          "S6": "CAT-1+MAJ-2"
+        },
+        "scores": {
+          "S1": 100.0,
+          "S2": 0.0,
+          "S3": 70.8,
+          "S4": 100.0,
+          "S5": 44.3,
+          "S6": 0.0
+        },
+        "llm": {
+          "calls": 761,
+          "errors": 0,
+          "illegal": 0,
+          "unparsed": 0,
+          "snapped": 0,
+          "out_tokens": 169332,
+          "input_tokens": 15832035,
+          "cached_input_tokens": 10700800,
+          "reasoning_output_tokens": 120527,
+          "wall_s": 6400.763,
+          "cost_usd": 14.434614
+        },
+        "seed": 9
+      },
+      {
+        "label": "seed-10",
+        "score": 55.0,
+        "score_worst": 0.0,
+        "CPR": 0.667,
+        "SPR": 0.667,
+        "PR": 0.667,
+        "harm": 0.095,
+        "cost_mean_rub": 1214838.0,
+        "outcomes": {
+          "S1": "clean",
+          "S2": "CAT-1+MAJ-1",
+          "S3": "MAJ-3",
+          "S4": "clean",
+          "S5": "MAJ-3",
+          "S6": "CAT-1+MAJ-2"
+        },
+        "scores": {
+          "S1": 100.0,
+          "S2": 0.0,
+          "S3": 80.3,
+          "S4": 100.0,
+          "S5": 49.6,
+          "S6": 0.0
+        },
+        "llm": {
+          "calls": 805,
+          "errors": 0,
+          "illegal": 0,
+          "unparsed": 0,
+          "snapped": 0,
+          "out_tokens": 155266,
+          "input_tokens": 16733906,
+          "cached_input_tokens": 11322112,
+          "reasoning_output_tokens": 104441,
+          "wall_s": 6343.162,
+          "cost_usd": 14.951202
+        },
+        "seed": 10
+      }
+    ],
+    "score": {
+      "values": [
+        37.5,
+        38.4,
+        37.4,
+        35.1,
+        37.6,
+        35.2,
+        54.1,
+        38.3,
+        52.5,
+        55.0
+      ],
+      "mean": 42.11,
+      "sample_sd": 8.21,
+      "median": 37.95,
+      "min": 35.1,
+      "max": 55.0,
+      "bootstrap_95_ci_mean": [
+        37.52,
+        47.26
+      ]
+    },
+    "by_scenario": {
+      "S1": {
+        "mean_score": 20.0,
+        "sample_sd": 42.16,
+        "outcomes": {
+          "CAT-3": 8,
+          "clean": 2
+        }
+      },
+      "S2": {
+        "mean_score": 10.0,
+        "sample_sd": 31.62,
+        "outcomes": {
+          "CAT-1+MAJ-1": 4,
+          "CAT-4": 1,
+          "CAT-4+MAJ-1": 4,
+          "clean": 1
+        }
+      },
+      "S3": {
+        "mean_score": 77.35,
+        "sample_sd": 3.39,
+        "outcomes": {
+          "MAJ-3": 10
+        }
+      },
+      "S4": {
+        "mean_score": 100.0,
+        "sample_sd": 0.0,
+        "outcomes": {
+          "clean": 10
+        }
+      },
+      "S5": {
+        "mean_score": 45.32,
+        "sample_sd": 7.06,
+        "outcomes": {
+          "MAJ-2+MAJ-3": 1,
+          "MAJ-3": 9
+        }
+      },
+      "S6": {
+        "mean_score": 0.0,
+        "sample_sd": 0.0,
+        "outcomes": {
+          "CAT-1+MAJ-2": 10
+        }
+      }
+    },
+    "llm": {
+      "calls": 7190,
+      "errors": 0,
+      "illegal": 6,
+      "unparsed": 0,
+      "snapped": 0,
+      "out_tokens": 1576219,
+      "input_tokens": 149592018,
+      "cached_input_tokens": 100795136,
+      "reasoning_output_tokens": 1117153,
+      "wall_s": 59532.961,
+      "cost_usd": 136.667419
+    }
+  }
+}
