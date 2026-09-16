@@ -6,7 +6,7 @@ rather than hand-edit. All are single self-contained files (inline CSS/JS/base64
 | Artifact | Built by | Audience |
 |---|---|---|
 | `viz/nh3bench-expert-guide.html` (~750 KB) | `viz/build_expert_doc.py` | plant operator validating realism |
-| `trainer/nh3bench-demo.html` (~2.2 MB) | `trainer/build_trainer.py` | same operator, hands-on |
+| `trainer/nh3bench-demo.html` (~3.3 MB) | `trainer/build_trainer.py` | same operator, hands-on |
 | `nh3twin-hmi.html` (~290 KB) | `viz/build_html.py` | internal — ISA-101 mnemonic with trends |
 | `NH3Ops-Bench-design.md` | hand-written | benchmark design, Russian (`docs/DESIGN-original-ru.md`) |
 

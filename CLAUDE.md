@@ -208,12 +208,13 @@ is recorded in `docs/DECISIONS.md`.
   would otherwise reach the model in silence.
 - **Adding the track must not change the Russian prompt by a byte.**
   `system_prompt()` and `user_prompt()` default to `lang="ru"`;
-  `tests/validate_prompt_en.py` compares both against the pre-demo revision. The 24
-  published runs answered the Russian task and have to stay reproducible.
-- **Three categories of run, and they never merge.** The published matrix
-  (`results/llm.jsonl` + `results/baselines*.jsonl`, 24 watchable runs in the old format)
-  is frozen; runs the repo owner measures afterwards live in `results/user/` and come out
-  as `kind:"user"`; the visitor's own play sessions live in their browser (`mine.js`).
+  `tests/validate_prompt_en.py` compares both against the pre-demo revision. Every
+  published run answered the Russian task and has to stay reproducible.
+- **Three categories of run, and they never merge.** The published matrix is the files
+  named in `demo_manifest.LLM_GLOBS` plus `results/baselines*.jsonl` — nine models × six
+  scenarios, 54 watchable runs, frozen once published; runs the repo owner measures
+  afterwards live in `results/user/` and come out as `kind:"user"`; the visitor's own play
+  sessions live in their browser (`mine.js`).
   `demo_manifest` tags rows with their source, the de-duplication key includes it, and the
   agents map is keyed by `(kind, id)` — otherwise re-measuring a published model under the
   same slug would silently overwrite its published row.
@@ -552,8 +553,20 @@ will silently send every task start back to a full warm-up.
 
 See `docs/STATUS.md` for the backlog. Short version of where things stand:
 
-- Six scenarios calibrated at seed 1; four Claude models measured across all six
-  (`results/llm.jsonl`, transcripts in `results/llm_traces/`).
+- Six scenarios calibrated at seed 1; **nine models** measured across all six — four
+  Claude (`results/llm.jsonl`), four through the Codex CLI adapter (`llm_gpt-*.jsonl`:
+  astra 81.5, sol 68.5, terra 37.5, luna 18.4) and GLM-5.3 through Z.AI
+  (`glm-5.3_zai_r1.jsonl`, 64.1). Transcripts for all of them in `results/llm_traces/`;
+  per-model write-ups in `docs/CODEX-*.md` and `docs/GLM-5.3-ZAI.md`. The demo shows the
+  same numbers because it computes them with `metrics.bench_score_run` — verified cell by
+  cell against the README table.
+- **`results/` also holds sensitivity studies, and they are not participants.** The Terra
+  reasoning-level and twin-seed series (`results/terra_*.jsonl`, policies like
+  `llm:gpt-5.6-terra:re-high` or `:seed`) are the spread of one model, not extra rows:
+  putting them in the table would multiply one participant into thirty. `LLM_GLOBS` lists
+  the published files explicitly, and `_unlisted_llm` warns only when a file brings a
+  model the demo does not show at all — a new model cannot be lost silently, a re-run of
+  a shown one stays quiet.
 - Anyone can measure their own model: `benchmark.py` plus the OpenRouter provider, with
   `docs/BENCHMARK.md` as the guide. Verified end to end on a live model.
 - The demo ships in the trainer HTML: Watch, Compare, Quick try, plus the full task, in
@@ -568,5 +581,5 @@ See `docs/STATUS.md` for the backlog. Short version of where things stand:
 
 Open, in rough priority order: the token-budget frontier (§11.6 — the safety-latency
 trade-off is still supported by a single point per model), the expert validation round,
-three seeds for π_random, and English-track runs of the four published models (which
-would make the two language columns comparable model by model).
+three seeds for π_random, and English-track runs of the published models (which would
+make the two language columns comparable model by model).

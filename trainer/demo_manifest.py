@@ -26,6 +26,7 @@ import argparse
 import glob
 import json
 import os
+import re
 import statistics
 import subprocess
 import sys
@@ -46,7 +47,22 @@ import report_metrics as R                                          # noqa: E402
 # Пути по умолчанию повторяют дефолты report_metrics: прогоны нового сценария
 # законно лежат в собственном файле (base_S6.jsonl, ponr_S6.json).
 BASE_GLOBS = ["results/baselines.jsonl", "results/base_S*.jsonl"]
-LLM_GLOBS = ["results/llm.jsonl"]
+# Опубликованные прогоны моделей: по файлу на модель, перечислены явно.
+# Маской нельзя -- рядом лежат осколки по одной задаче (…_S3.jsonl), куски
+# докачки (…_head/…_tail/…_partial/…_resumed), перепроверки (…_replayed) и
+# архивы прежних версий двойника (…_archive, …_v1). Появление нового файла
+# сборка замечает сама (_unlisted_llm) и говорит об этом вслух.
+LLM_GLOBS = [
+    "results/llm.jsonl",                    # четыре модели Claude, 24 прогона
+    "results/llm_gpt-5.6-luna.jsonl",
+    "results/llm_gpt-5.6-sol.jsonl",
+    "results/llm_gpt-5.6-terra.jsonl",
+    "results/llm_gpt-6-astra.jsonl",
+    "results/glm-5.3_zai_r1.jsonl",
+]
+# Что в results/ заведомо не итоговый файл прогона.
+LLM_SKIP = re.compile(r"(_S\d+|_head|_tail|_partial|_resumed|_replayed"
+                      r"|_archive|_v\d+)\.jsonl$")
 # Прогоны, измеренные пользователем самостоятельно (benchmark.py run). Лежат
 # отдельно от опубликованной матрицы и помечены в таблице как свои: 24
 # опубликованных прогона сделаны в прежнем порядке и пересъёмке не подлежат.
@@ -82,6 +98,52 @@ def _load_rows(globs, src="base"):
                         r["_src"] = src
                         rows.append(r)
     return rows
+
+
+def _base_model(policy: str) -> str:
+    """Модель без пометки прогона: llm:gpt-5.6-terra:re-high -> gpt-5.6-terra.
+
+    Третий сегмент -- это метка конкретного прогона (уровень раздумий,
+    номер повтора, подписка провайдера), а не другая модель.
+    """
+    parts = (policy or "").split(":")
+    return parts[1] if len(parts) > 1 and parts[0] == "llm" else ""
+
+
+def _unlisted_llm(globs=None):
+    """Файлы, в которых есть модель, не показанная в демо вовсе.
+
+    Список файлов задан руками, и это правильно: рядом лежат осколки и
+    архивы. Но новая модель не должна пропасть молча. Исследования
+    чувствительности (те же модели под другими метками прогона) молчат:
+    они не отдельные участники таблицы, а разброс уже показанного.
+    """
+    listed_files, shown = set(), set()
+    for pat in (globs or LLM_GLOBS):
+        for path in glob.glob(os.path.join(ROOT, pat)):
+            listed_files.add(path)
+            with open(path, encoding="utf-8") as fh:
+                for line in fh:
+                    if line.strip():
+                        shown.add(_base_model(json.loads(line).get("policy")))
+    shown.discard("")
+    out = []
+    for path in sorted(glob.glob(os.path.join(ROOT, "results", "*.jsonl"))):
+        if path in listed_files or LLM_SKIP.search(os.path.basename(path)):
+            continue
+        try:
+            with open(path, encoding="utf-8") as fh:
+                new_models = {
+                    _base_model(json.loads(line).get("policy"))
+                    for line in fh if line.strip()}
+        except (ValueError, OSError):
+            continue
+        new_models -= shown | {""}
+        if new_models:
+            out.append("%s (%s)"
+                       % (os.path.relpath(path, ROOT).replace(os.sep, "/"),
+                          ", ".join(sorted(new_models))))
+    return out
 
 
 def _load_ponr(globs):
@@ -173,6 +235,9 @@ def _run_key(row) -> str:
 
 def build(base_globs=BASE_GLOBS, llm_globs=LLM_GLOBS, ponr_globs=PONR_GLOBS,
           user_globs=USER_GLOBS):
+    for f in _unlisted_llm(llm_globs):
+        print("ВНИМАНИЕ: в демо нет модели из %s -- допишите файл в "
+              "LLM_GLOBS (trainer/demo_manifest.py)" % f, file=sys.stderr)
     base = _load_rows(base_globs, "base")
     llm = _load_rows(llm_globs, "llm")
     user = _load_rows(user_globs, "user")

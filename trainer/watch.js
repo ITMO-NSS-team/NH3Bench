@@ -394,7 +394,7 @@ function showWatchPick() {
         x => x.agent === m.id && x.kind === m.kind && x.scenario === sid
              && x.prompt_lang === m.prompt_lang);
       if (!r || !r.watchable) { h += "<td class='na'>—</td>"; return; }
-      const cls = r.CAT.length ? "cat" : (r.clean ? "ok" : "maj");
+      const cls = scoreCls(r);
       h += "<td><button class='wcell " + cls + "' data-run='" + r.id + "'>" +
            r.score + "</button></td>";
     });
@@ -437,6 +437,16 @@ function showWatchBrief(runId) {
   $("#acceptb").onclick = () => startWatch(WM.runId);
   $("#backb").onclick = showWatchPick;
   showScreen("brief");
+}
+
+// Цвет клетки результата. Зелёный -- только безупречные 100: балл 80 с
+// ущербом не должен читаться как «хорошо», это предотвращённая авария
+// ценой продукта или дозы персонала. Катастрофа остаётся красной, иначе
+// таблица теряет главный сигнал. Клетка без балла не красится вовсе.
+function scoreCls(r) {
+  if ((r.CAT || []).length) return "cat";
+  if (r.score === null || r.score === undefined || r.score === "") return "";
+  return Number(r.score) >= 100 ? "ok" : "maj";
 }
 
 function outcomeText(r) {
@@ -1301,7 +1311,7 @@ function showCompare() {
         x => x.agent === a.id && x.kind === a.kind && x.scenario === sid
              && x.prompt_lang === a.prompt_lang);
       if (!r) { h += "<td class='na'>—</td>"; return; }
-      const cls = r.CAT.length ? "cat" : (r.clean ? "ok" : "maj");
+      const cls = scoreCls(r);
       const badge = r.CAT.length ? r.CAT.map(outcomeCode).join("+")
         : (r.MAJ.length ? r.MAJ.map(outcomeCode).join("+") : L("clean"));
       h += "<td class='" + cls + "'" +
@@ -1340,8 +1350,7 @@ function showCompare() {
       sids.forEach(sid => {
         const r = a.runs[sid];
         if (!r) { h += "<td class='na'>—</td>"; return; }
-        const cls = (r.CAT || []).length ? "cat"
-          : ((r.MAJ || []).length ? "maj" : "ok");
+        const cls = scoreCls(r);
         const badge = (r.CAT || []).length ? r.CAT.map(outcomeCode).join("+")
           : ((r.MAJ || []).length ? r.MAJ.map(outcomeCode).join("+")
                                   : L("clean"));
