@@ -20,12 +20,23 @@ Status legend: ✅ done · 🔶 script in repo, rerun as needed · ⬜ planned.
 
 ---
 
-## V0 — Internal consistency ✅ (see `nh3twin/README.md` §Валидация)
+## V0 — Internal consistency ✅
 
-Mass conservation to machine precision (9 h), integral energy balance −0.61 %
-(45 min, residual attributed to coil-metal storage), full regime sweep
-(`tests/run_regimes.py`), Millard-2010 chain reproduction. These are necessary
-but not sufficient: they check the twin against itself.
+| check | result |
+|---|---|
+| NH₃ properties against CoolProp | error < 0.002 % |
+| superheated vapour and isentrope against CoolProp (`tests/validate_props.py`) | h, s < 1.6 %; ρ < 2.6 %; isentropic Δh < 0.4 % |
+| wave speed against NIST (adiabatic K_s) | agreement 1.0000 |
+| shock envelope against field data (`tests/validate_shock.py`) | sweep 250…540 bar inside the CSB range 100…700 bar; the ASME PVT 2023 point (~276 bar) on the model line |
+| mass conservation, 9 h | −0.0 % |
+| integral energy balance, 45 min | residual −0.61 % |
+| steady state | −40 / −10 / +28 °C, 257 kW, COP 3.19 (a physics fix moved power < 1 %) |
+| normal daily cycle with defrost | rooms at setpoint, HACCP held, no alarms |
+| Millard-2010 chain reproduction | reproduced end to end |
+
+The energy residual corresponds to the energy stored in the coil metal, which the audit
+does not account for. All of this is necessary but not sufficient: it checks the twin
+against itself and against property references, not against a plant.
 
 ## V1 — Property level vs CoolProp 🔶 `tests/validate_props.py`
 
@@ -34,8 +45,8 @@ the independent physical model; the twin only ever sees the 400-node table.
 
 | Check | Method | Acceptance | Measured (2026-08-26) |
 |---|---|---|---|
-| Saturation properties | 2 000 off-node pressures, log-spaced 0.31…24.9 бар, all table columns vs `PropsSI` | max rel. err < 0.05 % | **max 0.0018 % (rho_v), rest ≤ 0.0003 %** ✅ |
-| Superheat linearization | `h_vap/rho_vap/s_vap` at 4 pressures × superheats 5…80 K vs `PropsSI` | rel. err < 1.5 % (claimed in README) | **h ≤ 1.53 %, s ≤ 0.75 % everywhere; rho ≤ 1.3 % on the suction side (0.7–3 бар) but up to 9.4 % in the hot-gas corner (12 бар, 80 K)** ⚠️ |
+| Saturation properties | 2 000 off-node pressures, log-spaced 0.31…24.9 bar, all table columns vs `PropsSI` | max rel. err < 0.05 % | **max 0.0018 % (rho_v), rest ≤ 0.0003 %** ✅ |
+| Superheat linearization | `h_vap/rho_vap/s_vap` at 4 pressures × superheats 5…80 K vs `PropsSI` | rel. err < 1.5 % (claimed in README) | **h ≤ 1.53 %, s ≤ 0.75 % everywhere; rho ≤ 1.3 % on the suction side (0.7–3 bar) but up to 9.4 % in the hot-gas corner (12 bar, 80 K)** ⚠️ |
 | Isentropic compression | `h_isentropic` for LP→IP, IP→HP jumps at working superheats vs CoolProp `(P,S)→H` | rel. err on Δh < 2 % | **0.13–0.38 %** ✅ |
 | Inverse consistency | `Psat(Tsat(P)) = P` round-trip | < 0.05 % | **< 0.0001 %** ✅ |
 
@@ -63,11 +74,11 @@ inputs; each has a public reference to check against.
 - **Evaporative condensers**: heat rejection vs wet-bulb approach against
   BAC/EVAPCO published capacity tables. Acceptance: approach at design load
   within the published 8–14 K band, capacity slope vs wet-bulb within ±15 %.
-- **PRV capacity** (`prv_capacity = 2.2 кг/с`): recompute from ASHRAE-15 /
+- **PRV capacity** (`prv_capacity = 2.2 kg/s`): recompute from ASHRAE-15 /
   IIAR-2 relief sizing formulas for the vessel dimensions. Acceptance: ±20 %.
 - **Pipe strength**: Barlow hoop stress is textbook; what needs checking is
-  σ_y and burst factor for 09Г2С against ГОСТ 19281 (σ_y ≥ 345 МПа for
-  толщин < 10 мм; the conservative 235 МПа in config corresponds to Ст3 —
+  σ_y and burst factor for 09G2S against GOST 19281 (σ_y ≥ 345 MPa for
+  thicknesses < 10 mm; the conservative 235 MPa in config corresponds to St3 —
   decide and document which steel the archetype uses).
 
 ## V3 — System steady state vs engineering references ⬜
@@ -87,13 +98,13 @@ plants:
 
 ### Executed wave-speed check (2026-08-26) — finding
 
-`piping.wave_speed` uses K = 1.03 ГПа. CoolProp identifies this as the
-*isothermal* bulk modulus of liquid NH₃ near −10 °C (K_T = 1.02 ГПа) — but a
-compression wave is adiabatic: K_s = ρa² = 1.6…2.2 ГПа over −40…0 °C. With
+`piping.wave_speed` uses K = 1.03 GPa. CoolProp identifies this as the
+*isothermal* bulk modulus of liquid NH₃ near −10 °C (K_T = 1.02 GPa) — but a
+compression wave is adiabatic: K_s = ρa² = 1.6…2.2 GPa over −40…0 °C. With
 the Korteweg pipe-elasticity correction the twin's ρ·a — and hence the
 Joukowsky spike — is systematically low by ×1.16…1.37, worst exactly in the
-CIHS regime (−40 °C). Corrected peaks (≈170…490 бар vs current 130…360 бар)
-stay inside the CSB-cited field envelope of 100…700 бар. **Do not fix K in
+CIHS regime (−40 °C). Corrected peaks (≈170…490 bar vs current 130…360 bar)
+stay inside the CSB-cited field envelope of 100…700 bar. **Do not fix K in
 isolation**: the strength derate 0.45 was co-calibrated with the current
 spike magnitudes, so K and derate must be re-tuned together and the scenario
 calibration re-run; the V6 derate sweep (×0.75 ≈ the same shift in the
@@ -111,11 +122,11 @@ same 614 s. See the DECISIONS.md entry.
   decisive mechanism and its most contested numbers. Executed 2026-08-26
   against the data available without purchasing reports: a 36-point sweep of
   (slug velocity → peak pressure) plotted over the CSB field envelope
-  (100…700 бар) and the ~276 бар (4000 psia) ASME PVT 2023 point, with the
+  (100…700 bar) and the ~276 bar (4000 psia) ASME PVT 2023 point, with the
   NIST-property Joukowsky line as identity —
-  `results/validation/shock_envelope.png`. Result: peaks 250…540 бар at
+  `results/validation/shock_envelope.png`. Result: peaks 250…540 bar at
   24…49 м/с, all inside the envelope; the Millard-condition corridor
-  (8–11 бар, −40 °C) gives 430…513 бар, 4/4 in envelope. Remaining ⬜: digitize
+  (8–11 bar, −40 °C) gives 430…513 bar, 4/4 in envelope. Remaining ⬜: digitize
   Martin's RP-970 measured points and the Narayanan (2020) CFD envelope for a
   quantitative overlay rather than a range check.
 - **Defrost transient**: coil pressure/metal temperature trajectory shape vs
@@ -124,11 +135,16 @@ same 614 s. See the DECISIONS.md entry.
   concentration vs distance. Expected result: agreement in the dilute far
   field, ALOHA's dense-gas mode exceeding the twin's Gaussian plume near the
   source — which *bounds the error of the documented simplification* (twin
-  README, упрощение №1) instead of leaving it qualitative. Indoor zones:
+  DECISIONS.md, simplification 1) instead of leaving it qualitative. Indoor zones:
   compare a single-room release against NIST CONTAM with the same air-change
   rate. CAT-1/CAT-2 thresholds themselves trace to ERPG-2/AEGL tables — cite.
 
 ## V5 — Real plant data (expert protocol) ⬜ (the "real data" leg)
+
+The design set two further requirements for this leg, and both are still open: a
+**HAZOP-like expert acceptance of every accident chain**, signed by a practising engineer,
+and that engineer as a **co-author rather than an hourly consultant**. Without it the work
+is open to being dismissed as a plausible-looking simulation.
 
 Public SCADA data from ammonia plants effectively does not exist; the realistic
 path is the validating expert's plant, anonymized. Two instruments:
@@ -145,7 +161,8 @@ path is the validating expert's plant, anonymized. Two instruments:
    within ±20 %.
 2. **Blind discrimination test.** Show the expert N = 20 randomized trend
    panels (half real, half twin, same tags/axes/sampling); the expert labels
-   each "реальный/двойник". If accuracy is not significantly above chance
+   each one real or twin ("реальный/двойник" on the sheet the expert fills in). If
+   accuracy is not significantly above chance
    (binomial p > 0.05), the twin passes trend-level face validity; where the
    expert *can* tell, their stated reasons become a defect list. The trainer
    already collects expert notes per scenario — this extends the same
@@ -170,7 +187,7 @@ do not depend on the twin being exactly right.* Method:
   | `VesselCfg.UA_amb`, `RoomCfg.UA_env` | ×0.8…1.25 | insulation aging |
   | `CompressorCfg.eta_v/eta_is` (a0) | ×0.95…1.05 | datasheet tolerance |
   | `VesselCfg.prv_capacity` | ×0.8…1.25 | valve certification spread |
-  | `PipeSegment.dynamic_derate` | ×0.75…1.25 (0.34…0.56) | the calibrated 0.45, README упрощение №5 |
+  | `PipeSegment.dynamic_derate` | ×0.75…1.25 (0.34…0.56) | the calibrated 0.45, README simplification 5 |
 
 - Re-run the calibration quartet (`null`, `oracle`, `regulation`; `random`
   over seeds) on every scenario in every world.
@@ -211,12 +228,12 @@ Re-running the calibration matrix for the physics fixes exposed a defect that
 *predates* them (verified by A/B against a clean worktree at the previous
 HEAD): scenario S3's committed baseline rows — oracle clean, milk_max 5.73 —
 do not reproduce on this machine with unchanged code. At HEAD the S3 oracle
-run trips all four compressors (КМ3/КМ4 on the HP-pressure relay, КМ1/КМ2 on
+run trips all four compressors (CO-03/CO-04 on the HP-pressure relay, CO-01/CO-02 on
 discharge temperature — both manual-reset), the upper stage never recovers,
-and milk runs away to 14 °C (МАЙ-3, ~3700 с above HACCP). Mechanism: with
-19 кг of air the true discharge pressure rides exactly on the 16.5 бар trip
+and milk runs away to 14 °C (MAJ-3, ~3700 s above HACCP). Mechanism: with
+19 kg of air the true discharge pressure rides exactly on the 16.5 bar trip
 setpoint during the fault ramp; whether the trip fires before the oracle's
-purge lands at t≈337 с is a knife-edge that fell the other way in the
+purge lands at t≈337 s is a knife-edge that fell the other way in the
 original calibration environment. S1/S2/S4/S5/S6 reproduce exactly (28/30
 matrix cells identical to the archive, to the second). Consequence: S3 was
 retuned to restore the designed admission signs under current code, and S3's
@@ -224,11 +241,11 @@ published per-model cells must be treated as stale until re-measured. Lesson
 recorded: knife-edge scenarios need a margin check (distance of P_dis peak to
 the trip setpoint in the oracle run) as part of the admission criteria.
 
-Retune (same day): air charge 19 → 14 кг and the oracle playbook extended
+Retune (same day): air charge 19 → 14 kg and the oracle playbook extended
 with what a real operator does after clearing the causes — resetting the
 latched HP-relay lockouts (`COMP:RESET`), which also became part of the
 scenario's key actions. Verified under the new physics: oracle clean with a
-0.2 К milk margin (max 5.78 vs the 6.00 HACCP line), inaction and the
+0.2 K milk margin (max 5.78 vs the 6.00 HACCP line), inaction and the
 regulation policy lose the stage and the batch (milk to 14+ °C), random does
 not save. The trip-and-reset mechanic makes the scenario *harder* for
 agents, not easier: clearing root causes is no longer sufficient — the
@@ -300,9 +317,9 @@ obtained in practice.
 | B1 | ASHRAE RP-970 (Martin): lab CIHS experiments in NH₃ | shock model — measured peak pressure vs conditions | report purchasable from ASHRAE; data as figures → digitize |
 | B2 | Narayanan et al. 2020 CFD (validated vs RP-970) | shock envelope (v → Δp) | paper figures → digitize |
 | B3 | Steam-water CIWH datasets: NUREG/CR-5220, PMK-2 / EU WAHALoads benchmark | shape of the condensation-collapse → Joukowsky chain (fluid-agnostic mechanism check) | public reports |
-| C1 | Desert Tortoise 1983 (LLNL): 4 pressurized NH₃ releases, 10–41 т, arcs at 100–800 м | outdoor dispersion / fenceline (CAT-1) | data report public; also in Modeler's Data Archive and SMEDIS/REDIPHEM |
-| C2 | FLADIS 1993–94 (Risø): 0.25–0.55 кг/с NH₃ | outdoor dispersion, smaller scale | REDIPHEM/SMEDIS |
-| C3 | Jack Rabbit III (ongoing): large-scale NH₃ releases, ADMLC model intercomparison | dense-gas near field — bounds упрощение №1 | data being released to participants; intercomparison protocol public |
+| C1 | Desert Tortoise 1983 (LLNL): 4 pressurized NH₃ releases, 10–41 t, arcs at 100–800 m | outdoor dispersion / fenceline (CAT-1) | data report public; also in Modeler's Data Archive and SMEDIS/REDIPHEM |
+| C2 | FLADIS 1993–94 (Risø): 0.25–0.55 kg/s NH₃ | outdoor dispersion, smaller scale | REDIPHEM/SMEDIS |
+| C3 | Jack Rabbit III (ongoing): large-scale NH₃ releases, ADMLC model intercomparison | dense-gas near field — bounds simplification 1 | data being released to participants; intercomparison protocol public |
 | D1 | Aljuwayhel, Reindl, Klein, Nellis, IJR 2008: field measurements of an industrial NH₃ air cooler under frosting | `UA_dry`, `frost_UA_k`, `frost_rate_k` | paper figures → digitize |
 | D2 | Hoffenbecker, Klein, Reindl, HVAC&R Research 11(3) 2005: NH₃ hot-gas defrost model + data | defrost transient, useful-heat fraction | paper |
 | D3 | IRC (UW–Madison Industrial Refrigeration Consortium) technotes: head-pressure control, condenser performance, cold-store energy benchmarks | system steady state, kWh-per-tonne plausibility | public technotes |
@@ -313,7 +330,7 @@ obtained in practice.
 ## Reporting
 
 Each executed tier appends to `results/validation/` and one row to the table
-in `nh3twin/README.md` §Валидация. For the paper, validation compresses to one
+in V0 above. For the paper, validation compresses to one
 sentence per tier: property error vs CoolProp, shock envelope vs published
 experiments, expert discrimination result, and the robustness share — with the
 repository as the detailed reference.

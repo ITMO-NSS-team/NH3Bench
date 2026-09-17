@@ -1,19 +1,21 @@
 # -*- coding: utf-8 -*-
 """
-Английский трек задания.
+The English task track.
 
-Канонический язык задачи -- русский: 24 опубликованных прогона отвечали на
-русское задание, и их столбец остаётся как есть. Этот модуль добавляет
-второй, отдельно помеченный трек: то же задание по-английски, для моделей,
-которых сравнивают в англоязычной среде, и для демонстрации, где
-рассуждение модели должно быть читаемо на конференции.
+The canonical language of the task is Russian: the published runs
+answered the Russian task, and their column stays as it is. This module
+adds a second, separately labelled track: the same task in English, for
+models that are compared in an English-speaking setting, and for a demo
+where a model's reasoning has to be readable at a conference.
 
-Устройство намеренно такое же, как в интерфейсе тренажёра: имитатор не
-переписывается, английский подставляется на выходе. Разметка наблюдения
-остаётся за episode.py -- здесь переводится уже собранный текст, построчно
-и по правилам. Непереведённый обрывок не должен уйти в промпт молча,
-поэтому есть check(): она гоняет наблюдения всех шести задач, весь каталог
-и все ответы имитатора и требует, чтобы кириллицы не осталось ни одной.
+The arrangement is deliberately the same as in the trainer interface:
+the simulator is not rewritten, and English is substituted on the way
+out. The layout of an observation stays with episode.py -- what is
+translated here is the assembled text, line by line and by rule. An
+untranslated fragment must not reach the prompt silently, hence
+check(): it runs the observations of all six tasks, the whole catalog
+and every reply of the simulator and requires that not a single
+Cyrillic character is left.
 
     py -c "from nh3twin import prompt_en; prompt_en.check()"
 """
@@ -25,7 +27,7 @@ import re
 from .actions import CATALOG
 
 # =========================================================================
-# Роль и правила игры
+# The role and the rules of the game
 # =========================================================================
 
 ROLE_EN = """\
@@ -83,8 +85,8 @@ CAT_TITLES_EN = {
     "maint": "Maintenance",
 }
 
-# Вводные задач. Те же тексты, что в интерфейсе (trainer/i18n.js,
-# I18N_SCEN); совпадение проверяется tests/validate_prompt_en.py.
+# Task briefings. The same texts as in the interface (trainer/i18n.js,
+# I18N_SCEN); the match is checked by tests/validate_prompt_en.py.
 SCEN_EN = {
     "S1": "Night shift. Power was restored twenty minutes ago after a brief "
           "dip and the controller rebooted. Air cooler EV-03 was in a "
@@ -119,11 +121,11 @@ SCEN_EN = {
 }
 
 # =========================================================================
-# Названия команд
+# Command names
 #
-# Ключ подбирается по самой общей части идентификатора, обозначение
-# оборудования добавляется как есть -- ровно так же, как actText() в
-# интерфейсе, и теми же словами.
+# The key is matched on the most general part of the identifier and the
+# equipment tag is appended as it is -- exactly as actText() does in the
+# interface, and in the same words.
 # =========================================================================
 
 ACT_EN = {
@@ -158,9 +160,9 @@ ACT_EN = {
     "ALARM:ACK_TOP": "Acknowledge the highest-priority alarm",
 }
 
-# Остальные ключи каталога переводятся этим же словарём; он дополняется
-# ниже из интерфейсных названий, чтобы одна команда не называлась в демо и
-# в промпте по-разному.
+# The remaining catalog keys are translated by this same dictionary; it is
+# extended below from the interface names, so that one command is not called
+# differently in the demo and in the prompt.
 ACT_EN.update({
     "COMP:START": "Start compressor",
     "COMP:STOP": "Stop compressor",
@@ -201,7 +203,10 @@ ACT_EN.update({
 
 
 def act_text(aid: str, ru: str = "") -> str:
-    """Название команды по-английски; хвост идентификатора добавляется как есть."""
+    """
+    The command name in English; the tail of the identifier is appended as it
+    is.
+    """
     parts = aid.split(":")
     for n in range(len(parts), 0, -1):
         key = ":".join(parts[:n])
@@ -232,11 +237,11 @@ def system_prompt() -> str:
 
 
 # =========================================================================
-# Наблюдение и ответы установки
+# Observation and plant replies
 #
-# Правила применяются к уже собранному тексту: разметка остаётся за
-# episode.py, иначе два описания щита разъехались бы. Порядок важен --
-# сначала целые строки, потом обороты внутри них.
+# The rules are applied to the already assembled text: the layout stays with
+# episode.py, or two descriptions of the panel would drift apart. The order
+# matters -- whole lines first, then the phrases inside them.
 # =========================================================================
 
 UNITS = [
@@ -251,7 +256,7 @@ UNITS = [
     (re.compile(r"(?<=\d) м/с\b"), " m/s"),
 ]
 
-# Заголовки разделов наблюдения.
+# Observation section headings.
 HEADS = [
     ("ПРИБОРЫ:", "INSTRUMENTS:"),
     ("ОБОРУДОВАНИЕ:", "EQUIPMENT:"),
@@ -262,14 +267,14 @@ HEADS = [
     ("ПРИМЕЧАНИЕ:", "NOTE:"),
 ]
 
-# Обороты внутри строк оборудования и персонала.
+# Phrases inside the equipment and personnel lines.
 PHRASES = [
-    # компрессоры
+    # compressors
     (r"\bБЛОКИРОВКА:", "TRIPPED:"),
     (r"\bостанов по реле НД\b", "stopped by the LP cutout"),
     (r"\bзолотник\b", "slide"),
     (r"\bнагнетание\b", "discharge"),
-    # аппараты и клапаны
+    # units and valves
     (r"\bрежим\b", "mode"),
     (r"\bдавление змеевика\b", "coil pressure"),
     (r"\bподача открыта\b", "feed open"),
@@ -278,11 +283,11 @@ PHRASES = [
     (r"\bорошение вкл\b", "spray on"),
     (r"\bорошение выкл\b", "spray off"),
     (r"\bНАРЯД-ДОПУСК\b", "WORK PERMIT"),
-    # состояния
+    # states
     (r"\bНЕИСПРАВЕН\b", "FAULTY"),
     (r"\bостановлен\b", "stopped"),
     (r"\bработает\b", "running"),
-    # персонал
+    # personnel
     (r"\bв зоне\b", "in zone"),
     (r"\bдоза\b", "dose"),
     (r"\bв изолирующем аппарате\b", "wearing SCBA"),
@@ -305,8 +310,8 @@ _PRIO = re.compile(r"^\[(\d)\]\s*(.*)$")
 
 
 def _item(s: str) -> str:
-    """Один элемент строки наблюдения: тревога, состояние, доклад."""
-    if s.strip() == "нет":            # ТРЕВОГИ: нет
+    """One element of an observation line: an alarm, a state, a report."""
+    if s.strip() == "нет":            # ALARMS: none
         return "none"
     m = _PRIO.match(s.strip())
     if m:
@@ -318,13 +323,15 @@ def _item(s: str) -> str:
 
 
 def obs_text(text: str, brief_ru: str = "", sid: str = "") -> str:
-    """Наблюдение по-английски.
+    """
+    The observation in English.
 
-    Разделы разбираются по элементам, а не целой строкой: иначе в промпт
-    уходила бы русская строка под английским заголовком.
+    Sections are parsed element by element rather than as whole lines:
+    otherwise a Russian line would go into the prompt under an English
+    heading.
 
-    Вводная подставляется целиком: она написана человеком, и переводить её
-    правилами незачем -- английский вариант уже есть.
+    The briefing is substituted whole: it was written by a person, and there
+    is no point translating it by rule -- the English version already exists.
     """
     out = []
     for line in str(text).split("\n"):
@@ -376,10 +383,10 @@ def _dispatch_any(g):
     return f"DISPATCH {g[0]} ({g[1]}): {reply_text(g[2])}"
 
 
-# Ответы установки, тревоги и события. Тот же приём, что plantReply в
-# интерфейсе: нет правила -- остаётся оригинал, и check() это поймает.
+# Plant replies, alarms and events. The same device as plantReply in the
+# interface: no rule means the original stays, and check() will catch it.
 REPLY = [
-    # --- тревоги контроллера
+    # --- controller alarms
     (r"^(\S+): останов по низкому давлению$",
      r"\1: stopped on low pressure"),
     (r"^(\S+): высокое давление нагнетания, блокировка$",
@@ -405,9 +412,9 @@ REPLY = [
     (r"^команда агента$", "agent's command"),
     (r"^Аварийный останов: команда агента$",
      "Emergency shutdown: agent's command"),
-    # Остальные причины приходят латиницей и остаются как есть.
+    # Other reasons arrive in Latin and stay as they are.
     (r"^Аварийный останов: (.*)$", r"Emergency shutdown: \1"),
-    # --- тревоги по приборам и аппаратам
+    # --- alarms from instruments and units
     (r"^(\S+): реле высокого давления$", r"\1: high-pressure switch"),
     (r"^(\S+): температура нагнетания (\S+) C$",
      r"\1: discharge temperature \2 C"),
@@ -418,7 +425,7 @@ REPLY = [
     (r"^(\S+) на выравнивании, подача закрыта, давление в змеевике (\S+) "
      r"бар$",
      r"\1 equalising, feed closed, coil pressure \2 bar"),
-    # --- ответы на команды
+    # --- replies to commands
     (r"^нет команды (.*)$", r"no such command: \1"),
     (r"^не исполнено: задача завершилась во время раздумий$",
      "not executed: the task ended while you were thinking"),
@@ -502,7 +509,7 @@ REPLY = [
     (r"^вход запрещён: в зоне (\d+) ppm, работник без изолирующего "
      r"аппарата$",
      r"entry refused: \1 ppm in the zone, worker has no SCBA"),
-    # --- доклады работников
+    # --- workers' reports
     (r"^запаха нет$", "no smell"),
     (r"^слабый запах аммиака$", "a faint smell of ammonia"),
     (r"^отчётливый запах, режет глаза$",
@@ -537,7 +544,7 @@ REPLY = [
     (r"^работает вентиляторов (\d+) из (\d+)$",
      r"\1 of \2 fans running"),
     (r"^насос орошения не работает$", "the spray pump is not running"),
-    # --- события установки в журнале
+    # --- plant events in the log
     (r"^PLC: пуск (\S+)$", r"PLC: \1 started"),
     (r"^PLC: останов (\S+)$", r"PLC: \1 stopped"),
     (r"^PLC: начало оттайки (\S+)$", r"PLC: defrost of \1 started"),
@@ -571,7 +578,7 @@ REPLY = [
     (r"^HYDRAULIC_SHOCK (\S+): P_peak=(\S+) бар, dP/dt=(\S+) бар/с, "
      r"dv=(\S+) м/с$",
      r"HYDRAULIC_SHOCK \1: P_peak=\2 bar, dP/dt=\3 bar/s, dv=\4 m/s"),
-    # --- наряды в работе и доклады, как их печатает episode.py
+    # --- dispatches in progress and reports, as episode.py prints them
     (r"^(\S+) (\S+): НАРЯД НЕ ВЫПОЛНЕН — (.*)$", _refused),
     (r"^НАРЯД (\S+) \(([^)]+)\): ([A-Z_]+)\[([^\]]+)\] = (.*)$",
      _dispatch_item),
@@ -598,7 +605,7 @@ ITEM_EN = {
 
 
 def reply_text(s: str) -> str:
-    """Одна строка ответа установки. Нет правила -- строка не меняется."""
+    """One line of a plant reply. With no rule the line is left unchanged."""
     t = s.strip()
     if not t:
         return s
@@ -613,7 +620,7 @@ def reply_text(s: str) -> str:
 
 
 # =========================================================================
-# Сборка пользовательской части
+# Assembling the user part
 # =========================================================================
 
 def history_text(log, keep: int) -> str:
@@ -649,16 +656,17 @@ def user_prompt(obs, legal, ep, keep: int) -> str:
 
 
 # =========================================================================
-# Проверка полноты
+# Completeness check
 # =========================================================================
 
 def check(verbose: bool = True) -> int:
     """
-    Кириллица не должна уйти в англоязычный промпт.
+    No Cyrillic may reach an English prompt.
 
-    Прогоняются наблюдения всех шести задач в нескольких точках, весь
-    каталог, роль и все строки-шаблоны, которые имитатор способен выдать в
-    ответ на команду. Возвращает число мест, где перевода не хватило.
+    It runs the observations of all six tasks at several points, the whole
+    catalog, the role and every template string the simulator is able to
+    emit in reply to a command. Returns the number of places where the
+    translation was missing.
     """
     import ast
     import os
@@ -675,8 +683,8 @@ def check(verbose: bool = True) -> int:
         if ru.search(b):
             bad.append(("вводная " + sid, b[:60]))
 
-    # Шаблоны ответов имитатора -- разбором его исходников, как в
-    # trainer: так покрываются и те, что в наших сценариях не встречаются.
+    # The simulator's reply templates are found by parsing its sources, as in
+    # the trainer: that also covers the ones our scenarios never hit.
     base = os.path.dirname(os.path.abspath(__file__))
     for name in ("actions.py", "control.py", "episode.py", "plant.py"):
         tree = ast.parse(open(os.path.join(base, name),
@@ -694,7 +702,7 @@ def check(verbose: bool = True) -> int:
                 elif node.func.attr == "log" and node.args:
                     vals.append(node.args[0])
                 elif node.func.attr == "trigger_esd" and node.args:
-                    # Причина останова попадает в текст тревоги.
+                    # The shutdown reason goes into the alarm text.
                     vals.append(node.args[0])
             for v in vals:
                 for sample in _samples(v):
@@ -726,7 +734,7 @@ def _is_obs_head(s: str) -> bool:
 
 
 def _samples(node):
-    """Строки-образцы из узла: f-строки, конкатенации, тернарники."""
+    """Sample strings from a node: f-strings, concatenations, ternaries."""
     import ast
     if isinstance(node, ast.Constant):
         return [node.value] if isinstance(node.value, str) else []

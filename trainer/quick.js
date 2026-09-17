@@ -1,23 +1,25 @@
 // =====================================================================
-// Быстрая проба: задача №1 за две-три минуты.
+// Quick try: task 1 in two or three minutes.
 //
-// Задача та же и двойник тот же, но взаимодействие сокращено: вместо
-// каталога из 133 команд на развилках предлагается выбор из четырёх, а
-// промежутки проматываются. Это сделано для стенда -- посетитель не станет
-// изучать полный каталог, -- и именно поэтому результат быстрой пробы НЕ
-// является результатом бенчмарка и так и подписан.
+// The task and the twin are the same, but the interaction is shortened:
+// instead of the catalog of 133 commands, each decision point offers a
+// choice of four, and the gaps are fast-forwarded. This is meant for a
+// conference stand -- a visitor will not study the full catalog -- and
+// that is exactly why a quick-try result is NOT a benchmark result and is
+// labelled as such.
 //
-// Что остаётся настоящим:
-//   * физика и последствия -- те же, двойник не упрощён;
-//   * разбор после выбора -- это ответ самого двойника на команду, а не
-//     заранее написанный текст;
-//   * ловушка задачи сохранена: дистанционное прерывание оттайки молча
-//     перекрывается зависшим секвенсором.
+// What stays real:
+//   * the physics and the consequences -- the twin is not simplified;
+//   * the reply after a choice is the twin's own answer to the command,
+//     not a text written in advance;
+//   * the trap of the task is kept: aborting the defrost remotely is
+//     silently swallowed by the hung sequencer.
 //
-// Что упрощено (и сказано об этом прямо):
-//   * на развилке часы стоят -- иначе прочитать варианты не успеть;
-//   * выбор ограничен четырьмя командами из ста тридцати трёх;
-//   * промежутки между развилками проматываются.
+// What is simplified (and said openly):
+//   * the clock stops at a decision point -- otherwise there is no time
+//     to read the options;
+//   * the choice is four commands out of a hundred and thirty-three;
+//   * the gaps between decision points are fast-forwarded.
 // =====================================================================
 
 const QL = {
@@ -52,8 +54,9 @@ const QL = {
   howPrograms: "Как эту задачу прошли программы",
 };
 
-// Развилки. Порядок фиксирован, но вопрос выбирается по фактическому
-// состоянию установки: если оттайка всё ещё идёт, спрашиваем про неё.
+// Decision points. The order is fixed, but the question is chosen by the
+// plant's actual state: if the defrost is still running, that is what we ask
+// about.
 const QSTEPS = [
   {
     key: "start",
@@ -141,19 +144,19 @@ const QSTEPS = [
   },
 ];
 
-// Текст развилки на языке интерфейса.
+// The decision-point text in the interface language.
 function qt(v) {
   if (v && typeof v === "object") return v[LANG] || v.ru || "";
   return v || "";
 }
 
-const MAX_Q = 4;               // столько развилок показываем посетителю
-const GAP_S = 60;              // сколько виртуальных секунд между развилками
+const MAX_Q = 4;               // decision points shown to a visitor
+const GAP_S = 60;              // virtual seconds between them
 
 let QM = {
   on: false,
-  i: 0,                        // сколько развилок пройдено
-  asked: [],                   // какие развилки уже показаны
+  i: 0,                        // decision points passed
+  asked: [],                   // which ones were shown already
   picks: [],                   // {aid, result, t}
   pending: false,
   phase: "idle",               // 'ask' | 'roll' | 'over'
@@ -162,8 +165,8 @@ let QM = {
   tNow: 0,
 };
 
-// Вводная: тот же экран, что у полной задачи, но с честным предупреждением,
-// что взаимодействие сокращено и результат не является результатом бенчмарка.
+// Briefing: the same screen as the full task, with an honest warning that the
+// interaction is shortened and the result is not a benchmark result.
 function showQuickBrief() {
   const s = SCEN.find(x => x.sid === "S1");
   BRIEFKIND = "quick";
@@ -198,20 +201,20 @@ function startQuick() {
                                                    : false });
 }
 
-// Вызывается из handle() на каждом наблюдении, пока идёт проба.
+// Called from handle() on every observation while the try is running.
 function quickOnObs(isTick) {
   QM.pending = false;
   QM.tNow = obs ? obs.t : QM.tNow;
   if (QM.phase === "roll" && QM.rollLeft > 1e-6) { quickRoll(); return; }
-  // Досмотр до конца задачи продолжается порциями, пока двойник не скажет,
-  // что задача окончена.
+  // Watching to the end of the task continues in chunks until the twin says
+  // the task is over.
   if (QM.phase === "over") { quickFastForward(); return; }
   quickAsk();
 }
 
-// Выбор следующего вопроса по фактическому состоянию, а не по счётчику:
-// человек мог закрыть подачу первым же решением, и спрашивать про
-// зависший секвенсор тогда незачем.
+// The next question is chosen by the actual state rather than by a counter:
+// the person may have closed the feed with their very first decision, and
+// asking about the hung sequencer then makes no sense.
 function quickPickStep() {
   const ev = (obs && obs.evaps || []).find(v => v.tag === "EV-03");
   const hot = ev && ev.mode !== "COOL";
@@ -257,11 +260,11 @@ function quickChoose(step, k) {
   QM.pendingPick = o.aid;
   QM.pending = true;
   $("#qbox").innerHTML = "<p class='mut'>" + L("waiting") + "</p>";
-  // Раздумья не начисляются -- это и есть упрощение пробы.
+  // No deliberation is charged -- that is the simplification of the try.
   post({ cmd: "act", aid: o.aid, think: 0 });
 }
 
-// Ответ двойника на команду: подлинный текст, не заготовка.
+// The twin's answer to the command: the genuine text, not a canned one.
 function quickResult(resultText) {
   const aid = QM.pendingPick;
   QM.pendingPick = null;
@@ -270,8 +273,8 @@ function quickResult(resultText) {
   quickShowAnswer();
 }
 
-// Ответ нарисован отдельно от его получения: переключение языка должно
-// перерисовать этот экран, а второй раз спросить двойник нельзя.
+// The answer is drawn separately from being received: switching the language
+// must redraw this screen, and the twin cannot be asked a second time.
 function quickShowAnswer() {
   const p = QM.picks[QM.picks.length - 1];
   if (!p) return;
@@ -291,7 +294,8 @@ function quickShowAnswer() {
   $("#qskip").onclick = () => { QM.i = MAX_Q; quickBeginRoll(); };
 }
 
-// Промотка между развилками: установка живёт, посетитель не ждёт.
+// Fast-forward between decision points: the plant lives on, the visitor does
+// not wait.
 function quickBeginRoll() {
   QM.phase = "roll";
   QM.rollLeft = GAP_S;
@@ -310,7 +314,7 @@ function quickRoll() {
   post({ cmd: "tick", seconds: chunk });
 }
 
-// Досмотр до конца задачи: остаток проматывается без участия человека.
+// Watching to the end: the remainder is fast-forwarded without the person.
 function quickFinish() {
   QM.phase = "over";
   $("#qbox").innerHTML = "<div class='qroll'>" + L("watchingOut") +
@@ -325,8 +329,9 @@ function quickFastForward() {
   const pb = $("#qpb");
   if (pb) pb.style.width = (100 * Math.min(1, QM.tNow / hz)).toFixed(0) + "%";
   QM.pending = true;
-  // Крупная порция: остаток задачи бывает больше двадцати минут, и мелкими
-  // шагами это сотни вызовов. Исход от размера порции не зависит.
+  // A large chunk: the rest of the task can be more than twenty minutes, and
+  // small steps would mean hundreds of calls. The outcome does not depend on
+  // the chunk size.
   post({ cmd: "tick", seconds: 60, coarse: true });
 }
 
@@ -368,8 +373,8 @@ function quickShowResult() {
   h += "<tr><td>" + L("yourDecisions") + "</td><td>" + QM.picks.length + "</td></tr>";
   h += "</table>";
 
-  // Сравнение с программами на этой же задаче -- из того же манифеста, что
-  // и таблица результатов.
+  // Comparison with the agents on this same task -- from the same manifest as
+  // the results table.
   const runs = MANIFEST.runs.filter(x => x.scenario === "S1" &&
                                          x.kind === "model");
   if (runs.length) {
@@ -386,8 +391,8 @@ function quickShowResult() {
     h += "</table>";
   }
   h += "<p class='mut'>" + L("rules") + "</p>";
-  // Результат пробы тоже можно положить в таблицу -- но только пометкой
-  // «демо»: взаимодействие сокращено, и это не результат бенчмарка.
+  // A try result can go into the table too, but only under the "demo" mark:
+  // the interaction is shortened, and this is not a benchmark result.
   if (typeof mineAddHTML === "function" && QM.finalData) {
     h += mineAddHTML("quick");
   }

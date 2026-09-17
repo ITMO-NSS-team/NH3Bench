@@ -1,18 +1,19 @@
 """
-Цифровой двойник аммиачной холодильной установки.
+Digital twin of an ammonia refrigeration plant.
 
-Численная схема -- разделение на два временных масштаба:
+The numerical scheme splits into two time scales:
 
-  МЕДЛЕННЫЙ контур (dt = 0.5 с, RK4): тепловая динамика, давления в сосудах,
-  температуры помещений, уровни. Постоянные времени от единиц секунд до часов.
+  SLOW loop (dt = 0.5 s, RK4): thermal dynamics, vessel pressures, room
+  temperatures, levels. Time constants from a few seconds to hours.
 
-  БЫСТРЫЙ контур (алгебраический, внутри шага): конденсационный гидроудар,
-  срабатывание предохранительных клапанов, разрушение трубопровода. Волновые
-  процессы с характерным временем миллисекунды интегрировать вместе с медленной
-  динамикой бессмысленно и вычислительно разорительно.
+  FAST loop (algebraic, inside a step): condensation-induced hydraulic
+  shock, relief valve lift, pipe rupture. Wave processes with a
+  characteristic time of milliseconds make no sense to integrate
+  together with the slow dynamics and would be computationally ruinous.
 
-Такое разделение сохраняет полный детерминизм: шаг фиксирован, порядок
-вычислений фиксирован, стохастика берётся только из сида сценария.
+This split keeps full determinism: the step is fixed, the order of
+computation is fixed, and the only stochasticity comes from the
+scenario's seed.
 """
 
 from __future__ import annotations
@@ -29,7 +30,7 @@ from .dispersion import DispersionModel, Operator
 
 
 # =========================================================================
-# Режимы испарителя
+# Evaporator modes
 # =========================================================================
 
 COOL, PUMPDOWN, HOTGAS, DRAIN, EQUALIZE, IDLE = range(6)
@@ -40,7 +41,7 @@ DEFROST_DURATION = {PUMPDOWN: 180.0, HOTGAS: 1200.0, DRAIN: 120.0, EQUALIZE: 180
 
 
 # =========================================================================
-# Дискретное состояние оборудования
+# Discrete equipment state
 # =========================================================================
 
 @dataclass
@@ -49,11 +50,11 @@ class CompressorState:
     running: bool = False
     n_rpm: float = 2950.0
     slide_cmd: float = 1.0
-    tripped: bool = False           # блокировка, требует ручного возврата
-    lp_cutout: bool = False         # останов по реле НД, автоматический возврат
+    tripped: bool = False           # lockout, needs a manual reset
+    lp_cutout: bool = False         # stopped by the LP cutout, resets automatically
     trip_reason: str = ""
     runtime_h: float = 0.0
-    # Расчётные величины текущего шага
+    # Computed quantities of the current step
     m_dot: float = 0.0
     W_el: float = 0.0
     h_dis: float = 0.0
@@ -64,7 +65,7 @@ class CompressorState:
 class EvaporatorState:
     tag: str
     mode: int = COOL
-    plc_mode: int = COOL          # то, что "думает" контроллер
+    plc_mode: int = COOL          # what the controller "thinks"
     stage_timer: float = 0.0
     feed_valve: bool = True
     suction_valve: bool = True
@@ -73,10 +74,10 @@ class EvaporatorState:
     fans: bool = True
     shock_events: int = 0
     last_shock_log: float = -1e9
-    equalize_factor: float = 1.0        # проходимость байпаса выравнивания
-    manual_feed_locked: bool = False    # клапан заперт работником на месте
+    equalize_factor: float = 1.0        # equalize bypass throughput
+    manual_feed_locked: bool = False    # valve locked shut by a worker on site
     manual_hotgas_locked: bool = False
-    scada_feed_lock: bool = False       # подача закрыта командой агента
+    scada_feed_lock: bool = False       # feed closed by the agent's command
     P_peak: float = 0.0
 
 
@@ -85,7 +86,7 @@ class CondenserState:
     tag: str
     fans_running: int = 2
     pump_running: bool = True
-    fouling: float = 1.0          # 1.0 = чистый, 0.0 = полностью забит
+    fouling: float = 1.0          # 1.0 = clean, 0.0 = fully fouled
 
 
 @dataclass
@@ -98,7 +99,7 @@ class PumpState:
 
 
 # =========================================================================
-# Двойник
+# The twin
 # =========================================================================
 
 class Plant:
@@ -111,7 +112,7 @@ class Plant:
 
         self._build_index()
 
-        # Дискретное состояние
+        # Discrete state
         self.comp = {c.tag: CompressorState(c.tag) for c in self.cfg.compressors}
         self.evap = {e.tag: EvaporatorState(e.tag) for e in self.cfg.evaporators}
         self.cond = {c.tag: CondenserState(c.tag) for c in self.cfg.condensers}
@@ -122,8 +123,8 @@ class Plant:
             "PU-IP-B": PumpState("PU-IP-B", "VE-IP", running=False),
         }
 
-        # Пропускная способность клапанов подачи подбирается так, чтобы при
-        # номинальном напоре насоса расход равнялся кратности циркуляции.
+        # The capacity of the feed valves is chosen so that at the pump's
+        # nominal head the flow equals the circulation ratio.
         for e in self.cfg.evaporators:
             if e.Cv_feed <= 0:
                 P_ref = 0.72e5 if e.source == "VE-LP" else 2.91e5
@@ -134,52 +135,53 @@ class Plant:
         self.segments = piping.make_segments(self.cfg)
         self.disp = DispersionModel(self.cfg)
 
-        # Внешние условия
+        # Ambient conditions
         self.T_ambient = 297.15
         self.T_wetbulb = 292.15
         self.RH = 0.60
         self.power_available = True
 
-        # Ручные вмешательства агента и персонала
-        self.isolated = set()           # отсечённые сосуды
-        self.loto = set()               # оборудование под нарядом-допуском
-        self.trapped_lines = {}         # запертые жидкостные участки
-        self.manual_comp = {}           # tag -> True/False, команда агента
+        # Manual interventions by the agent and the personnel
+        self.isolated = set()           # isolated vessels
+        self.loto = set()               # equipment under a work permit
+        self.trapped_lines = {}         # trapped liquid segments
+        self.manual_comp = {}           # tag -> True/False, the agent's command
         self.manual_pump = {}
         self.evacuated = False
         self.notified = False
 
-        # Аварийные системы
+        # Safety systems
         self.esd_active = False
         self.esd_reason = ""
         self.water_curtain = False
 
-        # Отказы, зарегистрированные сценарием
+        # Faults registered by the scenario
         self.faults = []
         self.leaks = {}                # tag -> {vessel, zone, rate}
         self.rupture_holes = {}        # tag -> {vessel, area, zone}
         self.sensor_faults = {}        # tag -> dict
         self.valve_faults = {}
 
-        # Диагностика
+        # Diagnostics
         self.events = []
         self.cat_flags = set()
         self.maj_flags = set()
         self.prv_release_total = 0.0
         self.energy_kwh = 0.0
-        # Молоко, ушедшее в брак не от температуры, а от остановки приёмки
-        # (эвакуация цеха в разгар смены). Считается отдельно от нарушения
-        # HACCP: у этой потери другая причина и другая цена.
+        # Milk scrapped not because of temperature but because reception
+        # stopped (the hall was evacuated in the middle of the shift). It is
+        # counted separately from a HACCP violation: this loss has a different
+        # cause and a different price.
         self.scrapped_kg = 0.0
 
-        # Кэш давлений для подсказки решателю сосуда
+        # Pressure cache, a hint for the vessel solver
         self._P_hint = {"VE-LP": 0.72e5, "VE-IP": 2.91e5, "VE-HP": 11.5e5}
         self._aux = {}
 
         self.reset()
 
     # ------------------------------------------------------------------
-    # Индексация вектора состояния
+    # State vector indexing
     # ------------------------------------------------------------------
 
     def _build_index(self):
@@ -222,11 +224,11 @@ class Plant:
         return float((self.y if y is None else y)[self.idx[name]])
 
     # ------------------------------------------------------------------
-    # Инициализация
+    # Initialization
     # ------------------------------------------------------------------
 
     def reset(self, mode: str = "steady"):
-        """Инициализация в установившемся режиме."""
+        """Initialization at steady state."""
         y = np.zeros(self.n_states)
         c = self.cfg
 
@@ -268,7 +270,7 @@ class Plant:
 
         self.y = y
 
-        # Запуск основного оборудования
+        # Starting the main equipment
         for tag in ("CO-01", "CO-03"):
             self.comp[tag].running = True
         for tag in ("CO-02", "CO-04"):
@@ -287,11 +289,11 @@ class Plant:
         return self.y
 
     # ------------------------------------------------------------------
-    # Алгебраические величины
+    # Algebraic quantities
     # ------------------------------------------------------------------
 
     def vessel_pressures(self, y):
-        """Давление, паросодержание и уровень для каждого сосуда."""
+        """Pressure, vapour quality and level for every vessel."""
         out = {}
         for v in self.cfg.vessels:
             M = y[self.idx[f"M:{v.tag}"]]
@@ -305,13 +307,13 @@ class Plant:
     def _compressor(self, cc, cs, P_suc, P_dis, slide, liquid_fraction,
                     T_oil=318.15):
         """
-        Винтовой компрессор: расход, мощность, энтальпия и температура нагнетания.
+        Screw compressor: flow, power, enthalpy and discharge temperature.
 
-        Существенная деталь: у аммиака сухое сжатие даёт температуру нагнетания
-        100...130 C, что превышает допустимую. В винтовых компрессорах это
-        решается впрыском масла в зону сжатия -- масло принимает основную часть
-        теплоты и уносит её в маслоохладитель. Без этой модели компрессоры
-        отключаются по защите уже в номинальном режиме.
+        An essential detail: with ammonia, dry compression gives a discharge
+        temperature of 100...130 C, which is above the allowed limit. In screw
+        compressors this is solved by injecting oil into the compression zone --
+        the oil takes most of the heat and carries it to the oil cooler. Without
+        that model the compressors trip on protection even at nominal duty.
         """
         if (not cs.running or cs.tripped or cs.lp_cutout
                 or not self.power_available):
@@ -326,15 +328,16 @@ class Plant:
         b0, b1, b2 = cc.eta_is_coef
         eta_is = min(max(b0 + b1 * PI + b2 * PI * PI, 0.15), 0.82)
 
-        T_suc = pr.Tsat(P_suc) + 3.0            # небольшой перегрев на всасе
+        T_suc = pr.Tsat(P_suc) + 3.0            # a little superheat at the suction
         rho_suc = pr.rho_vap(P_suc, T_suc)
         m_dot = cc.V_disp * (cs.n_rpm / 60.0) * rho_suc * eta_v * slide
 
         h_suc = pr.h_vap(P_suc, T_suc)
-        # Влажный ход: жидкость на всасе снижает энтальпию и не сжимается
+        # Wet running: liquid at the suction lowers the enthalpy and does not
+        # compress
         if liquid_fraction > 0.0:
             h_suc = (1 - liquid_fraction) * h_suc + liquid_fraction * pr.h_l(P_suc)
-            m_dot *= (1.0 + liquid_fraction * 8.0)   # жидкость плотнее пара
+            m_dot *= (1.0 + liquid_fraction * 8.0)   # liquid is denser than vapour
 
         h_is = pr.h_isentropic(P_suc, T_suc, P_dis)
         w_is = max(h_is - h_suc, 1.0)
@@ -342,9 +345,9 @@ class Plant:
         W_shaft = m_dot * (h_dis_dry - h_suc)
         W_el = W_shaft / 0.94 + 2500.0
 
-        # --- Впрыск масла ---------------------------------------------------
-        # Смешение перегретого пара с маслом при кратности r_oil (масса масла
-        # к массе хладагента). Типичные значения для винтовых машин 3...6.
+        # --- Oil injection ---------------------------------------------------
+        # Mixing superheated vapour with oil at the ratio r_oil (mass of oil to
+        # mass of refrigerant). Typical values for screw machines are 3...6.
         T_dry = pr.T_vap(P_dis, h_dis_dry)
         cp_vap = pr.cp_v(P_dis)
         r_oil = cc.oil_ratio
@@ -357,7 +360,7 @@ class Plant:
         return m_dot, W_el, h_dis, T_dis, Q_to_oil
 
     # ------------------------------------------------------------------
-    # Производные
+    # Derivatives
     # ------------------------------------------------------------------
 
     def derivatives(self, y, t):
@@ -371,7 +374,8 @@ class Plant:
         P_hp = VP["VE-HP"]["P"]
         aux["VP"] = VP
 
-        # --- Унос жидкости на всас при переполнении сосуда ----------------
+        # --- Liquid carry-over to the suction when a vessel overfills
+        # ----------
         carryover = {}
         for v in c.vessels:
             L = VP[v.tag]["level"]
@@ -380,7 +384,7 @@ class Plant:
             else:
                 carryover[v.tag] = 0.0
 
-        # --- Компрессоры ---------------------------------------------------
+        # --- Compressors ---------------------------------------------------
         m_suc = {"VE-LP": 0.0, "VE-IP": 0.0}
         m_dis_ip = 0.0
         m_dis_hp = 0.0
@@ -411,25 +415,25 @@ class Plant:
                 m_dis_hp += m
                 H_dis_hp += m * hd
 
-            # Температура нагнетания -- инерция гильзы термометра
+            # Discharge temperature -- the inertia of the thermowell
             dy[self.idx[f"Tdis:{cc.tag}"]] = (Td - y[self.idx[f"Tdis:{cc.tag}"]]) / 8.0
-            # Золотник
+            # Slide valve
             cmd = cs.slide_cmd if (cs.running and not cs.tripped) else cc.slide_min
             err = cmd - slide
             dy[self.idx[f"slide:{cc.tag}"]] = np.clip(err / 1.0, -cc.slide_rate,
                                                       cc.slide_rate)
-            # Масло: нагрев от сжатия, охлаждение маслоохладителем
+            # Oil: heated by compression, cooled by the oil cooler
             Toil = y[self.idx[f"Toil:{cc.tag}"]]
             if cs.running and not cs.tripped:
                 Q_oil_in = Q_oil_c
-                # Маслоохладитель: сбрасывает тепло в контур конденсации
+                # Oil cooler: rejects the heat into the condensing circuit
                 Q_oil_out = cc.UA_oil_cooler * (Toil - self.T_wetbulb)
             else:
                 Q_oil_in = 0.0
                 Q_oil_out = 900.0 * (Toil - self.T_ambient)
             dy[self.idx[f"Toil:{cc.tag}"]] = (Q_oil_in - Q_oil_out) / (
                 cc.oil_charge * cc.C_oil)
-            # Накопитель влажного хода
+            # Wet-running accumulator
             slug = y[self.idx[f"slug:{cc.tag}"]]
             if cs.running and lf > cc.liquid_slug_limit:
                 dy[self.idx[f"slug:{cc.tag}"]] = 1.0
@@ -440,7 +444,7 @@ class Plant:
         aux["Q_oil"] = Q_oil_total
         aux["m_suc"] = m_suc
 
-        # --- Конденсаторы ----------------------------------------------------
+        # --- Condensers ----------------------------------------------------
         m_ncg = y[self.idx["m_ncg"]]
         V_cond = sum(cd.V for cd in c.condensers) + c.vessels[2].V * 0.4
         P_ncg = m_ncg * 296.8 * self.T_ambient / max(V_cond, 0.1) if m_ncg > 0 else 0.0
@@ -455,7 +459,7 @@ class Plant:
                 continue
             frac = st.fans_running / max(cd.n_fans, 1)
             if not st.pump_running:
-                frac *= 0.18            # сухой режим: резко хуже
+                frac *= 0.18            # dry mode: markedly worse
             UA_cond += cd.UA_nom * st.fouling * (0.25 + 0.75 * frac)
             W_cond_aux += cd.fan_power * st.fans_running
             W_cond_aux += cd.pump_power if st.pump_running else 0.0
@@ -471,7 +475,7 @@ class Plant:
         m_cond = min(Q_rej / dh_cond, m_dis_hp) if m_dis_hp > 1e-6 else 0.0
         aux["m_cond"] = m_cond
 
-        # --- Регулирующие клапаны уровня -------------------------------------
+        # --- Level control valves -------------------------------------------
         m_hp_to_ip, di_ip = self._level_valve(VP["VE-IP"], c.vessels[1], P_hp,
                                              P_ip, "LV-IP", c.Cv_LV_IP,
                                              y[self.idx["lvi:VE-IP"]])
@@ -483,21 +487,22 @@ class Plant:
         aux["m_hp_to_ip"] = m_hp_to_ip
         aux["m_ip_to_lp"] = m_ip_to_lp
 
-        # --- Испарители --------------------------------------------------------
-        # Схема потоков (все величины кг/с, положительные):
-        #   f_feed   : сосуд-источник -> змеевик (жидкость, насос)
-        #   f_vapout : змеевик -> сосуд-источник (пар)
-        #   f_liqret : змеевик -> сосуд-источник (избыток жидкости)
-        #   f_hg     : VE-HP -> змеевик (горячий пар оттайки)
-        #   f_drain  : змеевик -> VE-IP (конденсат оттайки)
-        # Баланс змеевика: dm/dt = f_feed + f_hg - f_vapout - f_liqret - f_drain
-        # Баланс сосуда:   dM/dt = ... - f_feed + f_vapout + f_liqret
-        # Такая явная запись даёт машинную точность сохранения массы, что
-        # проверяется тестом test_mass_conservation.
+        # --- Evaporators
+        # ------------------------------------------------------
+        # Flow scheme (all quantities in kg/s, positive):
+        #   f_feed   : source vessel -> coil (liquid, pump)
+        #   f_vapout : coil -> source vessel (vapour)
+        #   f_liqret : coil -> source vessel (excess liquid)
+        #   f_hg     : VE-HP -> coil (defrost hot gas)
+        #   f_drain  : coil -> VE-IP (defrost condensate)
+        # Coil balance:   dm/dt = f_feed + f_hg - f_vapout - f_liqret - f_drain
+        # Vessel balance: dM/dt = ... - f_feed + f_vapout + f_liqret
+        # Writing it out this explicitly gives machine-precision mass
+        # conservation, which test_mass_conservation checks.
         Q_room = {r.tag: 0.0 for r in c.rooms}
         Q_ice = 0.0
-        flow_from_vessel = {"VE-LP": 0.0, "VE-IP": 0.0}   # нетто изъятие
-        H_from_vessel = {"VE-LP": 0.0, "VE-IP": 0.0}      # нетто энтальпия
+        flow_from_vessel = {"VE-LP": 0.0, "VE-IP": 0.0}   # net withdrawal
+        H_from_vessel = {"VE-LP": 0.0, "VE-IP": 0.0}      # net enthalpy
         m_hotgas_total = 0.0
         H_hotgas = 0.0
         m_drain_to_ip = 0.0
@@ -514,13 +519,13 @@ class Plant:
             P_c = max(P_c, pr.P_MIN * 1.05)
             P_src = P_lp if e.source == "VE-LP" else P_ip
 
-            # Температура среды со стороны воздуха/воды
+            # Medium temperature on the air/water side
             if e.room == "ICE":
                 T_medium = y[self.idx["T_icewater"]]
             else:
                 T_medium = y[self.idx[f"Tair:{e.room}"]]
 
-            # Смачивание змеевика и иней
+            # Coil wetting and frost
             fill = min(mliq / max(0.55 * e.V_coil * pr.rho_l(P_src), 1e-6), 1.0)
             f_frost = 1.0 - e.frost_UA_k * min(frost / e.frost_max, 1.0)
             fan_ok = 1.0 if (es.fans and self.power_available) else 0.08
@@ -531,10 +536,10 @@ class Plant:
 
             f_feed = f_vapout = f_liqret = f_hg = f_drain = 0.0
             mliq_target = 0.42 * e.V_coil * pr.rho_l(max(P_src, pr.P_MIN * 1.1))
-            # Коэффициент наличия жидкости: при опустошении змеевика все
-            # расходы из него плавно спадают до нуля. Без этого множителя
-            # производная обнулялась жёстким условием, что создавало массу
-            # и давало дисбаланс в единицы процентов на длинных прогонах.
+            # Liquid-availability factor: as the coil empties, every flow out
+            # of it decays smoothly to zero. Without this multiplier the
+            # derivative was zeroed by a hard condition, which created mass and
+            # gave an imbalance of a few per cent on long runs.
             m_ref = max(0.03 * e.V_coil * pr.rho_l(max(P_src, pr.P_MIN * 1.1)), 1e-3)
             avail = min(max(mliq / m_ref, 0.0), 1.0)
 
@@ -544,12 +549,12 @@ class Plant:
                               for pp in self.pumps.values())
                 m_boil = max(Q, 0.0) / pr.h_fg(P_c) * avail
                 if es.feed_valve and pump_ok and self.power_available:
-                    # Расход подачи задаётся ГИДРАВЛИКОЙ (напор насоса минус
-                    # давление в змеевике), а не тепловым спросом. В штатном
-                    # режиме это даёт кратность циркуляции, но при аномально
-                    # высоком давлении в змеевике подача прекращается, а по мере
-                    # падения давления возобновляется -- именно этот переходный
-                    # процесс порождает конденсационный гидроудар.
+                    # The feed flow is set by the HYDRAULICS (pump head minus
+                    # coil pressure), not by thermal demand. In normal
+                    # operation that gives the circulation ratio, but at an
+                    # abnormally high coil pressure the feed stops and resumes
+                    # as the pressure falls -- and it is exactly that transient
+                    # which produces condensation-induced hydraulic shock.
                     dP_feed = (P_src + self.cfg.pump_head) - P_c
                     if dP_feed > 0:
                         f_feed = e.Cv_feed * math.sqrt(2.0 * pr.rho_l(P_src) * dP_feed)
@@ -567,11 +572,11 @@ class Plant:
             elif es.mode == HOTGAS:
                 m_boil = 0.0
                 if es.hotgas_valve and self.power_available:
-                    # Расход горячего пара НЕ задаётся клапаном, он определяется
-                    # тем, сколько пара змеевик способен сконденсировать:
-                    # Q = UA*(T_sat_coil - T_metal) + теплота плавления инея.
-                    # По мере прогрева металла расход самопроизвольно падает до
-                    # нуля -- это и есть физический конец оттайки.
+                    # The hot-gas flow is NOT set by a valve; it is set by how
+                    # much vapour the coil can condense: Q = UA*(T_sat_coil -
+                    # T_metal) plus the latent heat of melting the frost. As
+                    # the metal warms, the flow falls to zero on its own -- and
+                    # that is the physical end of a defrost.
                     dT_cond = max(T_c - Tm, 0.0)
                     Q_abs = e.UA_dry * 0.30 * dT_cond
                     if frost > 0:
@@ -589,9 +594,9 @@ class Plant:
             elif es.mode == EQUALIZE:
                 m_boil = max(Q, 0.0) / pr.h_fg(P_c) * 0.3 * avail
                 if es.suction_valve:
-                    # Выравнивание идёт через байпасную линию малого сечения.
-                    # Её засорение (масло, грязь) -- распространённый дефект:
-                    # стадия завершается по таймеру с остаточным давлением.
+                    # Equalizing goes through a small-bore bypass line. Its
+                    # clogging (oil, dirt) is a common defect: the stage
+                    # finishes on a timer with residual pressure left.
                     f_vapout = (max((P_c - P_src), 0.0) / 1e5 * 0.30
                                 * es.equalize_factor + m_boil)
                 Q_eff = Q * 0.3
@@ -600,9 +605,9 @@ class Plant:
                 m_boil = 0.0
                 Q_eff = 0.0
 
-            # --- ОПАСНОЕ СОСТОЯНИЕ: жидкость в горячий змеевик ----------------
-            # Клапан подачи открыт, а в змеевике ещё держится давление оттайки.
-            # Ровно это разрушило трубопровод на Millard в 2010 г.
+            # --- DANGEROUS STATE: liquid into a hot coil ----------------------
+            # The feed valve is open while the coil still holds defrost pressure.
+            # This is exactly what destroyed the pipework at Millard in 2010.
             if es.feed_valve and f_feed > 0 and P_c > P_src * 1.5:
                 shock_inputs.append((e, es, P_c, P_src, Tm, f_feed))
 
@@ -611,21 +616,21 @@ class Plant:
                 Q_melt = f_hg * pr.h_fg(P_c) * 0.35
                 m_melt = min(Q_melt / 334000.0, frost / 30.0)
 
-            # Баланс жидкости в змеевике. Жёсткое обнуление здесь недопустимо:
-            # оно нарушает сохранение массы. Опустошение обеспечивается
-            # множителем avail в самих расходах.
+            # Liquid balance in the coil. A hard zeroing here is not allowed:
+            # it breaks mass conservation. Emptying is provided by the avail
+            # multiplier inside the flows themselves.
             f_liqret *= avail
             dy[i_ml] = f_feed + f_hg - m_boil - f_liqret - f_drain
 
-            # Давление змеевика по балансу паровой массы
+            # Coil pressure from the vapour mass balance
             V_vap = max(e.V_coil - mliq / pr.rho_l(P_c), 5e-3)
             drho_dP = max((pr.rho_v(P_c * 1.02) - pr.rho_v(P_c * 0.98))
                           / (0.04 * P_c), 1e-9)
             dm_vap = m_boil + (f_hg if es.mode == HOTGAS else 0.0) * 0.0 - f_vapout
             dy[i_P] = dm_vap / (V_vap * drho_dP)
             if es.mode == HOTGAS:
-                # Змеевик поджимается до давления нагнетания, но не выше
-                # уставки предохранительного клапана.
+                # The coil is pressed up to the discharge pressure, but no
+                # higher than the relief valve setting.
                 P_target = min(P_hp * 0.92, 16.0e5)
                 dy[i_P] += (P_target - P_c) / 90.0
             elif es.mode in (COOL, PUMPDOWN) and es.suction_valve:
@@ -633,18 +638,19 @@ class Plant:
             elif es.mode == EQUALIZE and es.suction_valve:
                 dy[i_P] += (P_src - P_c) / 60.0
 
-            # Ограничение скорости изменения давления: физически она задана
-            # звуковой скоростью и объёмом, численно -- устойчивостью схемы.
+            # Rate limit on the pressure change: physically it is set by the
+            # speed of sound and the volume, numerically by the stability of
+            # the scheme.
             dy[i_P] = float(np.clip(dy[i_P], -4.0e5, 4.0e5))
 
-            # Металл змеевика
+            # Coil metal
             if es.mode == HOTGAS:
                 Q_metal = f_hg * pr.h_fg(P_c) * 0.55 - m_melt * 334000.0
             else:
                 Q_metal = -UA * 0.35 * (Tm - T_c)
             dy[i_Tm] = (Q_metal - 900.0 * (Tm - T_medium)) / (e.m_metal * e.c_metal)
 
-            # Иней
+            # Frost
             if es.mode == COOL and e.defrost_needed and T_c < 273.15:
                 dy[i_fr] = e.frost_rate_k * max(Q, 0.0)
             else:
@@ -652,13 +658,13 @@ class Plant:
             if frost <= 0 and dy[i_fr] < 0:
                 dy[i_fr] = 0.0
 
-            # Учёт нагрузки
+            # Load accounting
             if e.room == "ICE":
                 Q_ice += max(Q_eff, 0.0)
             elif e.room in Q_room:
                 Q_room[e.room] += max(Q_eff, 0.0)
 
-            # Нетто обмен с сосудом-источником
+            # Net exchange with the source vessel
             flow_from_vessel[e.source] += f_feed - f_vapout - f_liqret
             H_from_vessel[e.source] += (f_feed * pr.h_l(P_src)
                                         - f_vapout * pr.h_v(P_c)
@@ -677,11 +683,12 @@ class Plant:
         aux["Q_ice"] = Q_ice
         aux["m_hotgas"] = m_hotgas_total
 
-        # --- Балансы сосудов ---------------------------------------------------
+        # --- Vessel balances
+        # ---------------------------------------------------
         leak_by_vessel = self._leak_rates(VP)
 
-        # VE-LP: приход -- дросселирование из VE-IP; расход -- всас бустеров
-        # и нетто-отдача в змеевики.
+        # VE-LP: in -- throttling from VE-IP; out -- booster suction and the
+        # net delivery into the coils.
         v = c.vessels[0]
         Q_pump_lp = sum(c.pump_power * 0.8 for pp in self.pumps.values()
                         if pp.vessel == "VE-LP" and pp.running and not pp.failed)
@@ -695,9 +702,9 @@ class Plant:
                                    + Q_pump_lp
                                    - leak_by_vessel.get("VE-LP", 0.0) * pr.h_l(P_lp))
 
-        # VE-IP: приход -- дросселирование из VE-HP, нагнетание бустеров,
-        # конденсат оттайки; расход -- всас верхней ступени, дросселирование в
-        # VE-LP, нетто-отдача в змеевики.
+        # VE-IP: in -- throttling from VE-HP, booster discharge, defrost
+        # condensate; out -- high-stage suction, throttling into VE-LP, the net
+        # delivery into the coils.
         v = c.vessels[1]
         h_dis_lp = H_dis_ip / m_dis_ip if m_dis_ip > 1e-6 else pr.h_v(P_ip)
         Q_pump_ip = sum(c.pump_power * 0.8 for pp in self.pumps.values()
@@ -715,8 +722,8 @@ class Plant:
                                    + Q_pump_ip
                                    - leak_by_vessel.get("VE-IP", 0.0) * pr.h_l(P_ip))
 
-        # VE-HP: приход -- конденсат; расход -- дросселирование в VE-IP и
-        # отбор горячего пара на оттайку.
+        # VE-HP: in -- condensate; out -- throttling into VE-IP and the hot gas
+        # drawn for defrost.
         v = c.vessels[2]
         dy[self.idx["M:VE-HP"]] = (m_dis_hp - m_hp_to_ip - m_hotgas_total
                                    - leak_by_vessel.get("VE-HP", 0.0))
@@ -726,7 +733,8 @@ class Plant:
                                    + v.UA_amb * (self.T_ambient - VP["VE-HP"]["T"])
                                    - leak_by_vessel.get("VE-HP", 0.0) * pr.h_l(P_hp))
 
-        # --- Помещения ---------------------------------------------------------
+        # --- Rooms
+        # ---------------------------------------------------------------
         for r in c.rooms:
             Tair = y[self.idx[f"Tair:{r.tag}"]]
             Tprod = y[self.idx[f"Tprod:{r.tag}"]]
@@ -737,7 +745,8 @@ class Plant:
                 Q_env + Q_door + Q_prod + r.Q_internal - Q_room[r.tag]) / r.C_air
             dy[self.idx[f"Tprod:{r.tag}"]] = -Q_prod / r.C_product
 
-        # --- Ледяная вода и молоко ---------------------------------------------
+        # --- Ice water and milk
+        # --------------------------------------------------
         m_ice = y[self.idx["m_ice"]]
         T_iw = y[self.idx["T_icewater"]]
         T_milk = y[self.idx["T_milk"]]
@@ -747,7 +756,7 @@ class Plant:
 
         C_water = c.ice_bank_mass_nom * 4186.0
         if m_ice > 0 and Q_ice > Q_milk:
-            # Излишек холода намораживает лёд, температура держится у 0 C
+            # Surplus cooling builds ice, and the temperature stays near 0 C
             dy[self.idx["m_ice"]] = (Q_ice - Q_milk) / 334000.0
             dy[self.idx["T_icewater"]] = (Q_milk - Q_ice) * 0.02 / C_water
         else:
@@ -758,14 +767,15 @@ class Plant:
         if m_ice >= c.ice_max:
             dy[self.idx["m_ice"]] = min(dy[self.idx["m_ice"]], 0.0)
 
-        # Молоко в танке: охлаждается ледяной водой
+        # Milk in the tank: cooled by the ice water
         UA_milk = 90000.0
         Q_milk_cool = UA_milk * (T_milk - T_iw)
         dy[self.idx["T_milk"]] = (
             m_milk_flow * c.milk_c * (c.milk_inlet_T - T_milk) * 0.10 - Q_milk_cool
         ) / (c.milk_tank_mass * c.milk_c)
 
-        # --- Неконденсирующиеся газы и масло ------------------------------------
+        # --- Non-condensable gases and oil
+        # ---------------------------------------
         dy[self.idx["m_ncg"]] = self._fault_rate("F-NCG")
         dy[self.idx["m_oil_sys"]] = self._fault_rate("F-OIL")
 
@@ -773,17 +783,17 @@ class Plant:
         return dy
 
     # ------------------------------------------------------------------
-    # Вспомогательное
+    # Auxiliary
     # ------------------------------------------------------------------
 
     def _level_valve(self, vp, vcfg, P_up, P_dn, tag, Cv, integ):
         """
-        Регулирующий клапан уровня, ПИ-закон.
+        Level control valve, PI law.
 
-        Интегральная составляющая обязательна: с чисто пропорциональным законом
-        клапан при уровне на уставке пропускает фиксированную долю расхода,
-        не связанную со спросом, и ресивер опустошается. Возвращает
-        (расход, производную интегратора).
+        The integral term is indispensable: with a purely proportional law the
+        valve at the setpoint passes a fixed fraction of the flow, unrelated to
+        demand, and the receiver empties. Returns (flow, derivative of the
+        integrator).
         """
         if tag in self.valve_faults:
             f = self.valve_faults[tag]
@@ -793,20 +803,20 @@ class Plant:
                 return self._valve_flow(1.0, P_up, P_dn, Cv), 0.0
             if f["type"] == "stuck":
                 return self._valve_flow(f.get("opening", 0.5), P_up, P_dn, Cv), 0.0
-        # Уровень, который ВИДИТ регулятор. При отказе датчика расходится с
-        # фактическим -- это ядро сценария C1.
+        # The level the controller SEES. With a sensor fault it disagrees with
+        # the actual one -- that is the core of scenario C1.
         level_seen = self.indicated_level(vcfg.tag, vp["level"])
         err = vcfg.L_nom - level_seen
         raw = 0.5 + err * 8.0 + integ
         opening = float(np.clip(raw, 0.0, 1.0))
-        # Интегратор с защитой от насыщения
+        # Integrator with anti-windup
         d_integ = err * 0.020
         if (raw > 1.0 and err > 0) or (raw < 0.0 and err < 0):
             d_integ = 0.0
         return self._valve_flow(opening, P_up, P_dn, Cv), d_integ
 
     def indicated_pressure(self, vessel_tag: str, true_P: float) -> float:
-        """Показание датчика давления с учётом возможного отказа."""
+        """Pressure transmitter reading, accounting for a possible fault."""
         f = self.sensor_faults.get(f"PRESSURE_{vessel_tag}")
         if not f:
             return true_P
@@ -817,7 +827,8 @@ class Plant:
         return true_P
 
     def indicated_level(self, vessel_tag: str, true_level: float) -> float:
-        """Показание уровнемера с учётом возможного отказа датчика."""
+        """Level transmitter reading, accounting for a possible sensor fault.
+        """
         f = self.sensor_faults.get(f"LEVEL_{vessel_tag}")
         if not f:
             return true_level
@@ -836,15 +847,15 @@ class Plant:
         return opening * Cv * math.sqrt(2.0 * pr.rho_l(P_up) * dP)
 
     def _leak_rates(self, VP) -> dict:
-        """Суммарный расход утечек по сосудам."""
+        """Total leak flow per vessel."""
         out = {}
         for tag, leak in self.leaks.items():
             out[leak["vessel"]] = out.get(leak["vessel"], 0.0) + leak["rate"]
         for tag, h in self.rupture_holes.items():
             out[h["vessel"]] = out.get(h["vessel"], 0.0) + self._orifice(h, VP)
-        # Физическое ограничение: нельзя выбросить больше, чем есть в сосуде.
-        # Характерное время опорожнения принято 5 с -- при меньшем остатке
-        # расход плавно спадает до нуля вместо скачка.
+        # A physical limit: you cannot release more than the vessel holds. The
+        # characteristic emptying time is taken as 5 s -- with less left, the
+        # flow decays smoothly to zero instead of jumping.
         for tag in list(out):
             M_liq = VP[tag]["M_liq"]
             out[tag] = min(out[tag], M_liq / 5.0)
@@ -852,14 +863,14 @@ class Plant:
 
     def _orifice(self, hole, VP) -> float:
         """
-        Истечение через отверстие разрыва.
+        Discharge through a rupture opening.
 
-        Существенно, какое давление приложено к отверстию. Линия всасывания
-        стороны НД работает при 0.72 бар АБСОЛЮТНЫХ, то есть ниже атмосферного:
-        через разрыв в ней внутрь подсасывается воздух, а наружу аммиак не идёт.
-        Выброс даёт НАПОРНАЯ линия подачи, которая находится под давлением
-        насоса (P_сосуда + напор). Поэтому останов насосов -- действенная мера
-        локализации, и агент, который его выполняет, снижает выброс.
+        What matters is which pressure is applied to the opening. The LP suction
+        line runs at 0.72 bar ABSOLUTE, i.e. below atmospheric: through a
+        rupture in it air is drawn inwards and no ammonia goes out. The release
+        comes from the PUMPED feed line, which is under pump pressure (vessel
+        pressure plus head). That is why stopping the pumps is an effective
+        containment measure, and an agent who does it reduces the release.
         """
         P_vessel = VP[hole["vessel"]]["P"]
         pumps_on = any(pp.running and not pp.failed and not pp.cavitating
@@ -874,12 +885,12 @@ class Plant:
 
         dP = P_src - 101325.0
         if dP <= 0:
-            # Обратный перепад: подсос воздуха внутрь контура. Выброса нет,
-            # но накапливаются неконденсирующиеся газы.
+            # Reverse differential: air is drawn into the circuit. There is no
+            # release, but non-condensable gases accumulate.
             hole["air_ingress"] = True
             return 0.0
         hole["air_ingress"] = False
-        # Cd = 0.61, множитель 0.55 -- поправка на вскипание в сечении.
+        # Cd = 0.61, factor 0.55 -- a correction for flashing in the throat.
         return 0.61 * 0.55 * hole["area"] * math.sqrt(2.0 * rho * dP)
 
     def _fault_rate(self, ftype: str) -> float:
@@ -890,7 +901,7 @@ class Plant:
         return r
 
     def _door_profile(self, t: float, room: str) -> float:
-        """Доля времени с открытыми воротами, суточный профиль."""
+        """Fraction of time with the doors open, a daily profile."""
         hour = (t / 3600.0) % 24.0
         if room == "CHILL":
             return 0.35 if 6 <= hour < 18 else 0.05
@@ -899,14 +910,14 @@ class Plant:
         return 0.15 if 8 <= hour < 16 else 0.02
 
     def _milk_profile(self, t: float) -> float:
-        """Профиль приёмки молока: два пика -- утренний и вечерний."""
+        """Milk reception profile: two peaks, morning and evening."""
         hour = (t / 3600.0) % 24.0
         a = math.exp(-((hour - 7.0) ** 2) / 4.5)
         b = math.exp(-((hour - 18.0) ** 2) / 5.5)
         return min(a + b, 1.0)
 
     # ------------------------------------------------------------------
-    # Шаг интегрирования
+    # Integration step
     # ------------------------------------------------------------------
 
     def step(self, dt: float = 0.5):
@@ -919,7 +930,7 @@ class Plant:
         k4 = self.derivatives(y + dt * k3, t + dt)
         y_new = y + (dt / 6.0) * (k1 + 2 * k2 + 2 * k3 + k4)
 
-        # Физические ограничения
+        # Physical limits
         for e in self.cfg.evaporators:
             i = self.idx[f"mliq:{e.tag}"]
             y_new[i] = max(y_new[i], 0.0)
@@ -937,12 +948,12 @@ class Plant:
         self.y = y_new
         self.t = t + dt
 
-        # Обновление подсказок для решателя сосуда
+        # Updating the hints for the vessel solver
         VP = self.vessel_pressures(self.y)
         for tag, d in VP.items():
             self._P_hint[tag] = d["P"]
 
-        # --- Быстрый контур: алгебраические события ------------------------
+        # --- Fast loop: algebraic events ------------------------------------
         self._fast_events(dt, VP)
         self._update_dispersion(dt, VP)
         self._check_terminal(VP)
@@ -955,21 +966,21 @@ class Plant:
         return self.y
 
     def _fast_events(self, dt: float, VP):
-        """Гидроудар, предохранительные клапаны, разрушение."""
-        # 1. Конденсационный гидроудар
+        """Hydraulic shock, relief valves, rupture."""
+        # 1. Condensation-induced hydraulic shock
         for (e, es, P_c, P_src, Tm, m_feed) in self._aux.get("shock_inputs", []):
             seg = self.segments[e.tag]
-            # Разрушенный участок из расчёта исключается: труба уже открыта,
-            # волна давления в ней не формируется.
+            # A ruptured segment is excluded from the computation: the pipe is
+            # already open and no pressure wave forms in it.
             if seg.ruptured or self.segments["HEADER-LP"].ruptured:
                 continue
             res = piping.condensation_shock(seg, P_c, P_src, Tm, m_feed, dt,
                                             header=self.segments["HEADER-LP"],
                                             t_now=self.t)
-            if res["dPdt"] > 5e6:      # 50 бар/с -- порог регистрации удара
+            if res["dPdt"] > 5e6:      # 50 bar/s -- threshold for recording a shock
                 es.shock_events += 1
-                # Журналируем не чаще раза в 10 с, иначе непрерывный переходный
-                # процесс порождает сотни одинаковых записей.
+                # We log no more often than once per 10 s, or a continuous
+                # transient produces hundreds of identical entries.
                 if self.t - es.last_shock_log < 10.0:
                     continue
                 es.last_shock_log = self.t
@@ -981,23 +992,25 @@ class Plant:
                 self.cat_flags.add("CAT-3")
                 self.log(f"RUPTURE {broken.tag}: пик {res['P_peak']/1e5:.0f} бар "
                          f"> предел {broken.P_burst_dynamic/1e5:.0f} бар")
-                # Разрыв: истечение через сечение трубы. Коэффициент 0.35
-                # учитывает частичное раскрытие и двухфазность потока.
-                # Раскрытие 15 % сечения: разрыв редко бывает полнопроходным,
-                # обычно это продольная трещина или расхождение сварного шва.
+                # Rupture: discharge through the pipe cross-section. The
+                # coefficient 0.35 accounts for partial opening and for the
+                # two-phase nature of the flow. An opening of 15 % of the
+                # section: a rupture is rarely full-bore, usually it is a
+                # longitudinal crack or a weld separation.
                 self.rupture_holes[f"RUPTURE-{e.tag}"] = {
                     "vessel": e.source, "area": broken.area * 0.15,
                     "pumped": True,
                     "zone": "OUTDOOR" if e.room in ("LT", "BLAST") else "HALL"}
 
-        # 2. Предохранительные клапаны
+        # 2. Relief valves
         for v in self.cfg.vessels:
             P = VP[v.tag]["P"]
             if P > v.P_prv:
                 over = (P - v.P_prv) / (0.1 * v.P_prv)
                 rate = min(over, 1.0) * v.prv_capacity
-                # Сброс не может превышать наличную массу в сосуде. Без этого
-                # ограничения клапан «выпускает» больше, чем есть в системе.
+                # The release cannot exceed the mass present in the vessel.
+                # Without this limit the valve "lets out" more than the system
+                # holds.
                 M_avail = self.y[self.idx[f"M:{v.tag}"]] - 0.5
                 rate = min(rate, max(M_avail, 0.0) / dt)
                 if rate <= 1e-9:
@@ -1010,7 +1023,7 @@ class Plant:
             else:
                 self._aux.setdefault("prv_flow", {}).pop(v.tag, None)
 
-        # 3. Влажный ход компрессора
+        # 3. Compressor wet running
         for cc in self.cfg.compressors:
             if self.y[self.idx[f"slug:{cc.tag}"]] >= cc.liquid_slug_time:
                 self.cat_flags.add("CAT-4")
@@ -1018,13 +1031,13 @@ class Plant:
                 self.comp[cc.tag].trip_reason = "LIQUID_SLUG_DESTRUCTION"
                 self.log(f"COMPRESSOR_DESTROYED {cc.tag}: влажный ход")
 
-        # 4. Запертые жидкостные участки.
-        # Классическая скрытая опасность аммиачных систем: участок, отсечённый
-        # с обеих сторон с жидкостью внутри, не имеет паровой подушки. При
-        # нагреве давление растёт на ~9 бар на кельвин, и если гидростатический
-        # предохранительный клапан заглушен, участок разрушается. Кратковременное
-        # закрытие термостатом участок не запирает -- запирает устойчивое
-        # закрытие: аварийный останов, ручное запирание или блокировка SCADA.
+        # 4. Trapped liquid segments. The classic hidden hazard of ammonia
+        # systems: a segment closed on both sides with liquid inside has no
+        # vapour cushion. On warming, the pressure rises by about 9 bar per
+        # kelvin, and if the hydrostatic relief valve is plugged, the segment
+        # ruptures. A momentary closing by the thermostat does not trap the
+        # segment -- a sustained closing does: an emergency shutdown, a manual
+        # lock-out or a SCADA interlock.
         for ltag, ln in self.trapped_lines.items():
             if ln.get("ruptured"):
                 continue
@@ -1061,14 +1074,14 @@ class Plant:
                 ln["P0"] = min(ln["P"], 4.0e5)
                 ln["P"] = ln["P0"]
 
-        # 4b. Конечный запас утечек (разрушенные участки)
+        # 4b. Finite leak budget (ruptured segments)
         for l in self.leaks.values():
             if "budget" in l and l["rate"] > 0:
                 l["budget"] -= l["rate"] * dt
                 if l["budget"] <= 0:
                     l["rate"] = 0.0
 
-        # 4c. Статическая перегрузка трубопровода
+        # 4c. Static overload of the pipework
         P_lp = VP["VE-LP"]["P"]
         hdr = self.segments["HEADER-LP"]
         if not hdr.ruptured and P_lp > hdr.P_burst:
@@ -1086,8 +1099,9 @@ class Plant:
             raw = self._orifice(h, VP)
             if raw <= 0:
                 continue
-            # Масштабируем на тот же коэффициент, что применён в балансе масс,
-            # иначе выброс в атмосферу разойдётся с убылью из сосуда.
+            # We scale by the same coefficient applied in the mass balance, or
+            # the release to the atmosphere would disagree with the loss from
+            # the vessel.
             total_raw = sum(self._orifice(x, VP) for x in self.rupture_holes.values()
                             if x["vessel"] == h["vessel"])
             total_raw += sum(l["rate"] for l in self.leaks.values()
@@ -1125,7 +1139,7 @@ class Plant:
         self.events.append((round(self.t, 2), msg))
 
     # ------------------------------------------------------------------
-    # Выходные теги SCADA
+    # SCADA output tags
     # ------------------------------------------------------------------
 
     def tags(self) -> dict:

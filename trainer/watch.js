@@ -1,28 +1,29 @@
 // =====================================================================
-// Watch / Compare -- просмотр сохранённых прогонов моделей.
+// Watch / Compare -- replay of recorded agent runs.
 //
-// Надстройка над тренажёром, а не второй тренажёр. Воспроизведение идёт
-// теми же командами воркера, которыми играет человек ({cmd:'act', aid,
-// think}), и рисуется тем же renderObs(): физика, карта и приборы --
-// общие. Отличие одно: действия подаёт не пользователь, а сохранённый
-// протокол, и число токенов берётся из него же.
+// A layer on top of the trainer, not a second trainer. The replay goes
+// through the same worker commands a person plays with ({cmd:'act', aid,
+// think}) and is drawn by the same renderObs(): the physics, the map and
+// the instruments are shared. The one difference is that the actions come
+// from a saved transcript rather than from the user, and the token count
+// comes from it too.
 //
-// Источник истины -- неизменяемый протокол прогона. Скорость показа не
-// влияет ни на одну величину внутри задачи: она меняет лишь то, сколько
-// реальных секунд зритель ждёт между решениями. Двадцатикратное ускорение
-// показывает те же 20 виртуальных секунд за одну реальную.
+// The source of truth is the immutable run transcript. The playback speed
+// changes no quantity inside the task: it only changes how many real
+// seconds the viewer waits between decisions. Twenty-times speed shows
+// the same 20 virtual seconds in one real second.
 // =====================================================================
 
-// Данные прогонов кладёт сборка (build_trainer.py) отдельным объявлением
-// перед этим файлом. Здесь они только читаются, с пустым запасным
-// значением: файл должен оставаться разбираемым JavaScript сам по себе,
-// иначе редактор теряет разбор всего остального.
+// The run data is declared by the build (build_trainer.py) right before this
+// file. Here it is only read, with an empty fallback: the file must stay
+// parseable JavaScript on its own, or an editor loses the parse of everything
+// else.
 const MANIFEST = (typeof NH3_MANIFEST !== "undefined") ? NH3_MANIFEST
   : { benchmark: {}, scenarios: [], agents: [], runs: [], esd_just: {} };
 const TRACES = (typeof NH3_TRACES !== "undefined") ? NH3_TRACES : {};
 
-// Подписи вынесены в один объект: английская версия добавляется сюда же,
-// без охоты за литералами по всему файлу.
+// The labels are gathered in one object: the English version is added here
+// too, without hunting for literals across the file.
 const WL = {
   watch: "Смотреть прогон программы",
   play: "Пройти задачу самому",
@@ -69,7 +70,7 @@ const WL = {
   playSelf: "пройти самому",
   otherRun: "другой прогон",
   toHub: "главное меню",
-  // пояснения на экранах
+  // explanations on the screens
   hubRecs: "записей",
   hubCmpNote: "программы и опорные политики по всем задачам",
   hubDemoNote: "три-четыре решения, около двух минут",
@@ -296,13 +297,13 @@ const WL = {
   readyIn: "готовность через",
 };
 
-// Скорости: во сколько раз виртуальное время быстрее реального.
+// Speeds: how many times faster virtual time runs than real time.
 const SPEEDS = [1, 5, 20];
 
-let WM = {            // состояние просмотра
+let WM = {            // state of the replay
   runId: null,
   steps: [],
-  i: 0,                // сколько решений уже подано
+  i: 0,                // decisions submitted so far
   playing: false,
   speed: 5,
   stepMode: false,
@@ -310,42 +311,42 @@ let WM = {            // состояние просмотра
   jumpTo: null,        // 'alarm' | 'end' | null
   lastAlarmCount: 0,
   t0wall: 0,
-  // Фаза шага: программа сначала думает (часы идут, установка живёт, команды
-  // ещё нет), потом действует. Без этого разделения просмотр выглядел
-  // скачками и было непонятно, почему время уходит.
+  // Phase of a step: the agent first thinks (the clock runs, the plant lives
+  // on, there is no command yet), then acts. Without that split the replay
+  // looked like a series of jumps and it was unclear where the time went.
   phase: "idle",       // 'think' | 'act' | 'over'
-  thinkLeft: 0,        // сколько виртуальных секунд раздумий осталось
+  thinkLeft: 0,        // virtual seconds of deliberation left
   thinkTotal: 0,
-  tNow: 0,             // время задачи по последнему наблюдению
+  tNow: 0,             // task time from the last observation
   finalData: null,
   forceFinal: false,
-  endedAt: null,       // момент катастрофы, если она застала размышление
-  pending: false,      // ждём ответа исполнителя
+  endedAt: null,       // moment of the catastrophe, if it caught the thinking
+  pending: false,      // waiting for the worker
   retry: false,
-  // Пошаговый режим: доехать до готовности ответа и встать. Взведённый
-  // «шаг» переживает занятость исполнителя, поэтому нажатие не теряется.
+  // Step mode: run up to the point where the answer is ready and stop there.
+  // An armed step survives the worker being busy, so a press is never lost.
   stepArmed: false,
-  seekTo: null,        // цель перемотки, виртуальные секунды
-  tPrev: 0,            // время на прошлом наблюдении -- для плавной метки
+  seekTo: null,        // seek target, virtual seconds
+  tPrev: 0,            // previous observation time, for a smooth handle
   tPrevWall: 0,
 };
 
 function wRun(id) {
-  // Свой прогон живёт в браузере, а не в манифесте.
+  // The visitor's own run lives in the browser, not in the manifest.
   return MANIFEST.runs.find(r => r.id === id) ||
     ((typeof mineDiffRunById === "function") ? mineDiffRunById(id) : null);
 }
 function wScen(sid) { return MANIFEST.scenarios.find(s => s.sid === sid); }
 
 // ---------------------------------------------------------------------
-// Главное меню
+// Main menu
 // ---------------------------------------------------------------------
 
 function showHub() {
   const box = $("#hubbox");
   box.innerHTML = "";
   const nWatch = MANIFEST.runs.filter(r => r.watchable).length;
-  // Быстрая проба переехала в список задач: это та же задача 1, короче.
+  // The quick try moved into the task list: it is the same task 1, shorter.
   const items = [
     ["watch", L("watch"), L("hubRecs") + ": " + nWatch, false],
     ["compare", L("compare"), L("hubCmpNote"), false],
@@ -367,12 +368,13 @@ function showHub() {
 }
 
 // ---------------------------------------------------------------------
-// Выбор прогона
+// Choosing a run
 // ---------------------------------------------------------------------
 
 function showWatchPick() {
   const box = $("#wpickbox");
-  // Свои прогоны тоже смотрятся: у них есть протокол, а значит и запись.
+  // The visitor's own runs are watchable too: they have a transcript, hence a
+  // recording.
   const models = MANIFEST.agents.filter(
     a => a.kind === "model" || a.kind === "user");
   const sids = MANIFEST.scenarios.map(s => s.sid);
@@ -380,8 +382,8 @@ function showWatchPick() {
   sids.forEach(s => { h += "<th>" + scenNo(s) + "</th>"; });
   h += "</tr>";
   models.forEach(m => {
-    // Две записи одной модели на разных языках задания различаются только
-    // пометкой -- без неё в списке два одинаковых имени.
+    // Two records of one model on different task languages differ only by the
+    // badge -- without it the list shows two identical names.
     h += "<tr><td class='nm'>" +
          (m.kind === "user"
           ? "<span class='mbadge'>" + L("mineOwn") + "</span>" : "") +
@@ -409,11 +411,11 @@ function showWatchPick() {
 }
 
 // ---------------------------------------------------------------------
-// Воспроизведение
+// Replay
 // ---------------------------------------------------------------------
 
-// Подготовка просмотра: тот же экран вводной, что у человека, но принимается
-// не смена, а запись прогона.
+// Preparing the replay: the same briefing screen as for a person, except that
+// what is accepted is a run recording rather than the shift.
 function showWatchBrief(runId) {
   const r = wRun(runId);
   if (!r || !TRACES[runId]) { alert(L("noTrace")); return; }
@@ -439,10 +441,11 @@ function showWatchBrief(runId) {
   showScreen("brief");
 }
 
-// Цвет клетки результата. Зелёный -- только безупречные 100: балл 80 с
-// ущербом не должен читаться как «хорошо», это предотвращённая авария
-// ценой продукта или дозы персонала. Катастрофа остаётся красной, иначе
-// таблица теряет главный сигнал. Клетка без балла не красится вовсе.
+// Colour of a result cell. Green is for a flawless 100 only: a score of 80
+// with damage must not read as "good", it is an accident prevented at the
+// price of product or of personnel dose. A catastrophe stays red, otherwise
+// the table loses its main signal. A cell without a score is not coloured at
+// all.
 function scoreCls(r) {
   if ((r.CAT || []).length) return "cat";
   if (r.score === null || r.score === undefined || r.score === "") return "";
@@ -471,10 +474,11 @@ function startWatch(runId, seekAfter) {
     phase: "idle", thinkLeft: 0, thinkTotal: 0, tNow: 0,
     finalData: null, forceFinal: false, endedAt: null,
     pending: false, dragging: false, dragT: null,
-    // Кадровая анимация отменена выше -- обнуляем и признак, иначе
-    // requestNowAnim решит, что она уже идёт, и бегунок замрёт.
+    // The frame animation was cancelled above -- clear the flag too, or
+    // requestNowAnim will decide it is already running and the handle will
+    // freeze.
     anim: null, retry: false, stepArmed: false,
-    // Цель перемотки назад: до неё доигрываем на максимальной скорости.
+    // Target of a backward seek: we replay up to it at full speed.
     seekTo: (typeof seekAfter === "number" && seekAfter > 0)
             ? seekAfter : null,
   });
@@ -483,8 +487,8 @@ function startWatch(runId, seekAfter) {
   hist = { t: [], k: {} };
   $("#log").innerHTML = "";
   applyMode();
-  // Прогрев показывается полосой на экране вводной -- ровно так же, как при
-  // приёме смены человеком. Заслонка поверх экрана здесь не нужна.
+  // The warm-up is shown as a bar on the briefing screen -- exactly as when a
+  // person accepts the shift. A curtain over the screen is not needed here.
   $("#busy").style.display = "none";
   $("#acceptb").disabled = true;
   $("#warmwrap").style.display = "block";
@@ -493,7 +497,7 @@ function startWatch(runId, seekAfter) {
   post({ cmd: "start", sid: sid });
 }
 
-// Исполнитель занят: запоминаем намерение и повторяем, когда освободится.
+// The worker is busy: remember the intention and repeat it once it is free.
 function watchBusy() {
   WM.retry = true;
   clearTimeout(WM.timer);
@@ -501,13 +505,14 @@ function watchBusy() {
 }
 
 // ---------------------------------------------------------------------
-// Ход просмотра
+// Course of the replay
 //
-// Шаг решения разложен на две фазы. Сначала программа думает: часы задачи
-// идут, установка живёт, приборы обновляются, команды ещё нет. Потом
-// команда исполняется. Физика при этом ровно та же, что при подаче
-// act(aid, think) целиком -- порции продвижения совпадают с внутренними
-// порциями Session._adv, и совпадение исхода проверено на CPython.
+// A decision step is split into two phases. First the agent thinks: the task
+// clock runs, the plant lives on, the instruments update, there is no command
+// yet. Then the command executes. The physics is exactly what submitting
+// act(aid, think) as a whole would give -- the advance chunks match
+// Session._adv's own chunks, and the identical outcome was verified on
+// CPython.
 // ---------------------------------------------------------------------
 
 function watchOnObs(isTick) {
@@ -523,7 +528,7 @@ function watchOnObs(isTick) {
       obs.alarms.length > (WM.lastAlarmCount0 || 0)) {
     WM.jumpTo = null; WM.playing = false;
   }
-  // Перемотка достигла цели.
+  // The seek reached its target.
   if (WM.seekTo !== null && WM.tNow >= WM.seekTo) {
     WM.seekTo = null; WM.playing = false; WM.jumpTo = null;
   }
@@ -537,7 +542,7 @@ function watchOnObs(isTick) {
   const spent = performance.now() - WM.t0wall;
 
   if (WM.phase === "think" && WM.thinkLeft > 1e-6) {
-    // Ещё думает: продвигаем время порциями и показываем это.
+    // Still thinking: advance the time in chunks and show it.
     const chunk = Math.min(10, WM.thinkLeft);
     const target = fast ? 0 : (chunk / WM.speed) * 1000;
     clearTimeout(WM.timer);
@@ -546,7 +551,8 @@ function watchOnObs(isTick) {
     return;
   }
   if (WM.phase === "think") {
-    // Ответ готов, но ещё не подан -- осмысленная точка останова.
+    // The answer is ready but not submitted yet -- a meaningful place to
+    // stop.
     if (WM.stepArmed) {
       WM.stepArmed = false; WM.playing = false;
       renderWatchBar(); renderWatchCtl(); return;
@@ -555,13 +561,14 @@ function watchOnObs(isTick) {
     WM.timer = setTimeout(watchDoAct, 0);
     return;
   }
-  // Команда исполнена (или это самое начало): переходим к следующей.
+  // The command has executed (or this is the very beginning): move on to the
+  // next one.
   if (WM.i >= WM.steps.length) {
     WM.phase = "over"; WM.playing = false;
     renderWatchBar(); renderWatchCtl(); return;
   }
   const st = WM.steps[WM.i];
-  const gap = Math.max(0, st.t_rel - WM.tNow);   // ожидание до опроса щита
+  const gap = Math.max(0, st.t_rel - WM.tNow);   // wait until the panel is polled
   const target = fast ? 0 : (gap / WM.speed) * 1000;
   clearTimeout(WM.timer);
   WM.timer = setTimeout(watchBeginThink, Math.max(0, target - spent));
@@ -591,19 +598,21 @@ function watchDoAct() {
   WM.i += 1;
   WM.phase = "act";
   WM.thinkLeft = 0;
-  // Название команды -- через actText: TR переводит только обозначения
-  // оборудования, поэтому в английском журнале оставался русский текст.
+  // The command name goes through actText: TR translates equipment tags only,
+  // so the English shift log kept Russian text.
   pushLog("[" + hhmmss(WM.tNow) + "] " + actText(st.action) +
     "  (" + (st.tokens || 0) + " " + L("tokens") + ", " +
     L("thinkS") + " " + Math.round(WM.thinkTotal) + " " +
     L("unitS") + ")");
   WM.t0wall = performance.now();
   WM.pending = true;
-  // Раздумья уже отыграны порциями, поэтому здесь они нулевые.
+  // The deliberation has already been played out in chunks, so it is zero
+  // here.
   post({ cmd: "act", aid: st.action, think: 0 });
 }
 
-// Задача кончилась во время размышления: показываем сам момент, а не итог.
+// The task ended during the thinking: we show that very moment, not the
+// result.
 function watchEnded(t) {
   WM.phase = "over";
   WM.playing = false;
@@ -620,8 +629,8 @@ function watchEnded(t) {
 }
 
 function watchFinalReady(data) {
-  // Признак «это итог записи» едет вместе с данными: mode к моменту
-  // показа итога уже переключён обратно на игру.
+  // The "this is a recording's result" mark rides with the data: by the time
+  // the result is shown, mode has already been switched back to play.
   if (data) data.watched = true;
   WM.finalData = data;
   WM.phase = "over";
@@ -631,7 +640,7 @@ function watchFinalReady(data) {
   renderTimeline();
 }
 
-// Часы в заголовке: время задачи и то, чем занята программа.
+// The clock in the header: task time and what the agent is busy with.
 function watchClock() {
   const t = WM.tNow;
   $("#clock").textContent = hhmmss(t);
@@ -650,14 +659,14 @@ function watchClock() {
 }
 
 // ---------------------------------------------------------------------
-// Панель просмотра
+// Replay panel
 // ---------------------------------------------------------------------
 
 function renderWatchBar() {
   const r = wRun(WM.runId);
   if (!r) return;
-  // Пока программа думает, показываем ТО решение, которое она готовит;
-  // после исполнения -- то, которое подала.
+  // While the agent is thinking we show THE decision it is preparing; after
+  // execution, the one it submitted.
   const thinking = WM.phase === "think";
   const idx = thinking ? WM.i : Math.max(0, WM.i - 1);
   const st = WM.steps[idx] || WM.steps[WM.steps.length - 1];
@@ -676,8 +685,8 @@ function renderWatchBar() {
        Math.round(totTok / MANIFEST.benchmark.think_rate_tok_per_s) + " " + L("unitS") +
        "</div></div>";
 
-  // Состояние шага -- главное, чего не хватало: без него ускоренный показ
-  // выглядел необъяснимыми скачками времени.
+  // The state of the step is the main thing that was missing: without it a
+  // sped-up replay looked like unexplained jumps in time.
   if (WM.phase === "over") {
     const cat = (WM.finalData && WM.finalData.CAT) || r.CAT || [];
     h += "<div class='wst " + (cat.length ? "bad" : "ok") + "'>" +
@@ -701,9 +710,9 @@ function renderWatchBar() {
 
   const reply = (st.reply || "").trim();
   if (reply && !thinking) {
-    // По умолчанию показывается короткая выжимка: на стенде длинное
-    // рассуждение никто не читает, но возможность увидеть подлинный
-    // ответ целиком должна остаться -- иначе это уже не протокол.
+    // A short excerpt is shown by default: nobody reads a long piece of
+    // reasoning at a stand, but the possibility of seeing the genuine answer
+    // in full has to stay -- otherwise it is no longer a transcript.
     const short = replyExcerpt(reply, 400);
     const full = replyMarks(reply);
     h += "<div class='wrsn'><div class='lbl'>" + L("reasoning") + "</div>" +
@@ -746,7 +755,7 @@ function renderWatchCtl() {
     h += "<button id='wend'>" + L("toEnd") + "</button>";
     h += "<span class='sep'></span>";
   }
-  // По завершении -- то, чего не хватало: внятный выбор, что делать дальше.
+  // At the end -- what was missing: a clear choice of what to do next.
   if (over) h += "<button id='wfin' class='on'>" + L("showFinal") + "</button>";
   h += "<button id='wagain'>" + L("again") + "</button>";
   h += "<button id='wself'>" + L("playSelf") + "</button>";
@@ -757,8 +766,8 @@ function renderWatchCtl() {
   $("#watchctl").querySelectorAll(".wsp").forEach(el => {
     el.onclick = () => {
       if (el.dataset.sp === "step") {
-        // Пошаговый режим не «ставит на паузу здесь», а доезжает до
-        // следующей готовности ответа и встаёт там.
+        // Step mode does not "pause here" but runs up to the next ready
+        // answer and stops there.
         WM.stepMode = true; WM.stepArmed = true; WM.playing = true;
         WM.jumpTo = null; WM.seekTo = null; WM.t0wall = 0;
       } else {
@@ -781,13 +790,14 @@ function renderWatchCtl() {
   };
   const nx = $("#wnext");
   if (nx) nx.onclick = () => {
-    // «Следующее решение»: домотать до момента, когда ответ готов, и встать.
-    // Взведённый шаг переживает занятость исполнителя, поэтому нажатие не
-    // теряется, даже если Pyodide в этот миг считает порцию.
+    // "Next decision": run up to the moment the answer is ready and stop. An
+    // armed step survives the worker being busy, so the press is not lost
+    // even if Pyodide is computing a chunk at that instant.
     clearTimeout(WM.timer);
     WM.stepMode = true; WM.playing = true;
     WM.jumpTo = null; WM.seekTo = null; WM.t0wall = 0;
-    // Если стоим ровно на готовом ответе -- подать его и встать на следующем.
+    // If we are standing exactly on a ready answer -- submit it and stop at
+    // the next one.
     const atReady = WM.phase === "think" && WM.thinkLeft <= 1e-6;
     WM.stepArmed = true;
     renderWatchCtl();
@@ -810,14 +820,15 @@ function renderWatchCtl() {
   };
   const fin = $("#wfin");
   if (fin) fin.onclick = () => {
-    // Уходя на итог, возвращаем экран задачи человеку: иначе кнопки
-    // «пройти заново» и «к списку задач» на итоговом экране не работали.
+    // On the way to the result we give the task screen back to the person:
+    // otherwise the "play again" and "task list" buttons on the result screen
+    // did not work.
     const data = WM.finalData;
     WM.forceFinal = true;
     watchLeave();
     if (data) showFinal(data);
-    // Итог ещё не запрошен: помечаем разово, чтобы пометку получил именно
-    // этот ответ двойника, а не следующий итог человека.
+    // The result has not been requested yet: mark it once, so the mark lands
+    // on this answer from the twin and not on the person's next result.
     else { WM.markWatched = true; lockUI(true); post({ cmd: "final" }); }
   };
   $("#wagain").onclick = () => { clearTimeout(WM.timer);
@@ -834,8 +845,8 @@ function renderWatchCtl() {
                                 watchLeave(); showHub(); };
 }
 
-// Возврат экрана задачи в состояние «играет человек». Без этого после
-// просмотра оставался гибрид: каталога нет, кнопки не действуют.
+// Returning the task screen to the "a person is playing" state. Without this
+// a hybrid was left after a replay: no catalog, and buttons that do nothing.
 function watchLeave() {
   clearTimeout(WM.timer);
   WM.playing = false;
@@ -845,8 +856,8 @@ function watchLeave() {
   restorePlayBrief();
 }
 
-// Экран вводной обслуживает и просмотр, и игру, поэтому его надо возвращать
-// в исходный вид: иначе на нём остаётся кнопка «НАЧАТЬ ПРОСМОТР».
+// The briefing screen serves both the replay and the game, so it has to be
+// restored: otherwise the "START THE REPLAY" button stays on it.
 function restorePlayBrief() {
   BRIEFKIND = "play";
   const wb = $("#wbrief"); if (wb) wb.style.display = "none";
@@ -859,14 +870,14 @@ function restorePlayBrief() {
 }
 
 // ---------------------------------------------------------------------
-// Таймлайн решений
+// Decision timeline
 // ---------------------------------------------------------------------
 
 function renderTimeline() {
   const r = wRun(WM.runId);
   if (!r) return;
-  // Во время перетаскивания разметку не трогаем: подмена элемента под курсором
-  // и ломала перемотку.
+  // While dragging we do not touch the markup: replacing the element under
+  // the cursor was what broke the seek.
   if (WM.dragging) { drawNow(WM.dragT, true); return; }
   const sc = wScen(r.scenario);
   const hz = r.horizon_s || (sc && sc.horizon_s) || 1800;
@@ -877,8 +888,9 @@ function renderTimeline() {
     const cls = (i < WM.i ? "d done" : "d") +
       (s.action === "NO_OP" ? " noop" : "") +
       (i === WM.i - 1 ? " cur" : "");
-    // Толщина отметки -- цена размышления: сколько виртуальных секунд
-    // стоило это решение. Так видно, где программа думала дорого.
+    // The width of a mark is the price of the deliberation: how many virtual
+    // seconds that decision cost. It shows where the agent thought
+    // expensively.
     const w = Math.max(2, Math.min(14, (s.tokens || 0) / 400));
     h += "<i class='" + cls + "' style='left:" + x.toFixed(2) +
          "%;width:" + w.toFixed(1) + "px' data-i='" + i + "' title='" +
@@ -889,13 +901,14 @@ function renderTimeline() {
     const px = Math.min(100, 100 * ponr / hz);
     h += "<i class='ponr' style='left:" + px.toFixed(2) + "%' title='" +
          L("ponr") + " " + hhmmss(ponr) + "'></i>";
-    // Красную черту подписываем: на видео подсказку мышью не покажешь.
+    // The red line is labelled: on a video you cannot show a tooltip with the
+    // mouse.
     h += "<span class='ponrlab' style='left:" + px.toFixed(2) + "%'>" +
          L("ponrTag") + "</span>";
   }
-  // Полоса размышления и бегунок рисуются один раз, а двигаются потом через
-  // style без перерисовки разметки: перерисовка innerHTML на каждой порции
-  // и была причиной рывков.
+  // The thinking span and the handle are drawn once and then moved through
+  // style without redrawing the markup: redrawing innerHTML on every chunk
+  // was the cause of the jerking.
   h += "<i class='thinkspan' style='display:none'></i>";
   h += "<i class='now'></i>";
   h += "</div><div class='tlax'><span>00:00</span><span class='nowt'>" +
@@ -909,11 +922,11 @@ function renderTimeline() {
   drawNow(WM.tNow, false);
 }
 
-// Перемотка. Обработчики навешиваются на постоянный контейнер один раз:
-// раньше они висели на самой линии, а её разметка перерисовывалась при
-// каждом наблюдении -- и в середине перетаскивания обработчик считал
-// координаты по элементу, уже удалённому из DOM. Получался NaN, проверка
-// «назад нельзя» его пропускала, и просмотр уезжал до конца задачи.
+// Seeking. The handlers are attached to the permanent container once: earlier
+// they hung on the line itself, whose markup was redrawn on every observation
+// -- and in the middle of a drag the handler computed coordinates from an
+// element already removed from the DOM. That gave NaN, the "no going back"
+// check let it through, and the replay ran away to the end of the task.
 function bindSeek() {
   const box = $("#timeline");
   if (!box || box.dataset.bound) return;
@@ -934,10 +947,10 @@ function bindSeek() {
     return isFinite(t) ? t : null;
   };
 
-  // Щелчок по полосе открывает ближайшее решение: отметка шириной
-  // две-четыре точки, попасть в неё мышью трудно, а спросить «что здесь
-  // происходило» хочется именно так. Сразу после перетаскивания щелчок
-  // не считается -- иначе отпускание бегунка открывало бы карточку.
+  // A click on the strip opens the nearest decision: a mark is two to four
+  // pixels wide, hard to hit with the mouse, and asking "what happened here"
+  // is exactly what one wants to do that way. A click right after a drag does
+  // not count -- otherwise releasing the handle would open the card.
   box.addEventListener("click", (ev) => {
     if (Date.now() - (WM.dragEnd || 0) < 250) return;
     const cl = ev.target.classList;
@@ -949,8 +962,8 @@ function bindSeek() {
   });
 
   box.addEventListener("mousedown", (ev) => {
-    // Перемотка -- только за бегунок. Пока она висела на всей полосе,
-    // промах по отметке решения уводил просмотр вперёд.
+    // Seeking is by the handle only. While it hung on the whole strip,
+    // missing a decision mark moved the replay forward instead.
     if (!ev.target.classList.contains("now")) return;
     if (!box.querySelector(".tl")) return;
     const t0 = pick(ev);
@@ -987,7 +1000,7 @@ function bindSeek() {
   });
 }
 
-// Ближайшее к моменту t решение -- для щелчка по полосе.
+// The decision nearest to moment t -- for a click on the strip.
 function nearestStep(t) {
   let best = -1, bd = Infinity;
   WM.steps.forEach((s, i) => {
@@ -997,7 +1010,7 @@ function nearestStep(t) {
   return best;
 }
 
-// Перемотка к заданному времени задачи.
+// Seek to a given task time.
 function seekTo(t) {
   if (!isFinite(t)) { drawNow(WM.tNow, false); return; }
   const r = wRun(WM.runId);
@@ -1006,9 +1019,9 @@ function seekTo(t) {
   t = Math.max(0, Math.min(hz, t));
 
   if (t < WM.tNow - 1 || WM.phase === "over") {
-    // Назад двойник отмотать не может -- физика необратима. Но начало задачи
-    // восстанавливается из снимка мгновенно, поэтому «назад» делается
-    // перезапуском и прокруткой до нужной секунды.
+    // The twin cannot be rewound -- the physics is irreversible. But the
+    // start of the task is restored from a snapshot instantly, so "back" is
+    // done by restarting and running forward to the second asked for.
     startWatch(WM.runId, t);
     return;
   }
@@ -1022,8 +1035,9 @@ function seekTo(t) {
   if (!WM.pending) watchOnObs(false);
 }
 
-// Положение бегунка. Между порциями время оценивается по прошедшему
-// реальному времени и скорости -- так метка идёт ровно, а не рывками.
+// Position of the handle. Between chunks the time is estimated from the
+// elapsed real time and the speed -- so the mark moves evenly instead of
+// jerking.
 function drawNow(t, forced) {
   const tl = $("#timeline") && $("#timeline").querySelector(".tl");
   if (!tl) return;
@@ -1050,7 +1064,7 @@ function drawNow(t, forced) {
   if (lbl && !WM.dragging) lbl.textContent = hhmmss(t);
 }
 
-// Кадровая анимация бегунка между порциями продвижения.
+// Frame animation of the handle between advance chunks.
 function requestNowAnim() {
   if (WM.anim) return;
   const frame = () => {
@@ -1060,7 +1074,8 @@ function requestNowAnim() {
     if (WM.dragging) { WM.anim = requestAnimationFrame(frame); return; }
     let t = WM.tNow;
     if (WM.playing && WM.pending) {
-      // Порция уже отправлена: время идёт, наблюдения ещё нет.
+      // A chunk has already been sent: time is running, the observation is
+      // not there yet.
       const dt = (performance.now() - WM.tPrevWall) / 1000 * WM.speed;
       t = Math.min(WM.tNow + 10, WM.tNow + Math.max(0, dt));
     }
@@ -1074,7 +1089,8 @@ function inspectStep(i) {
   const s = WM.steps[i];
   if (!s) return;
   const think = (s.tokens || 0) / MANIFEST.benchmark.think_rate_tok_per_s;
-  // Задержка исполнения команды -- из каталога: в записи прогона её нет.
+  // The command's execution latency comes from the catalog: the transcript
+  // does not carry it.
   const a = BYID[s.action];
   let h = "<h3>" + L("decision") + " " + (i + 1) + " · " + hhmmss(s.t_rel) +
           "</h3>";
@@ -1086,8 +1102,8 @@ function inspectStep(i) {
        " (" + hhmmss(s.t_rel) + " → " + hhmmss(s.t_rel + think) + ")</td></tr>";
   if (a) h += "<tr><td>" + L("execTime") + "</td><td>+" + a.lat + " " + L("unitS") + "</td></tr>";
   h += "<tr><td>" + L("parseStatus") + "</td><td>" + (s.status || "—") + "</td></tr>";
-  // Реальная задержка вызова показывается отдельно и НЕ участвует в часах
-  // задачи: иначе быстрый канал связи давал бы программе преимущество.
+  // The real call latency is shown separately and does NOT enter the task
+  // clock: otherwise a fast connection would give an agent an advantage.
   h += "<tr><td>" + L("wallTime") + "</td><td>" + (s.wall_s || 0) +
        " " + L("unitS") + " <span class='mut'>" + L("wallNote") + "</span></td></tr>";
   h += "</table>";
@@ -1098,19 +1114,19 @@ function inspectStep(i) {
 }
 
 // ---------------------------------------------------------------------
-// Сравнение решений двух прогонов
+// Comparing the decisions of two runs
 //
-// Отвечает на один вопрос: где две программы разошлись. Последовательности
-// команд выравниваются наибольшей общей подпоследовательностью -- там, где
-// они совпадают, строки стоят рядом; где разошлись, каждая в своей
-// половине. Поэтому «одно и то же, но на минуту позже» видно как
-// совпадение со сдвигом времени, а не как полное расхождение.
+// It answers one question: where the two agents diverged. The command
+// sequences are aligned by their longest common subsequence -- where they
+// match, the rows stand side by side; where they diverge, each is in its
+// own half. So "the same thing, but a minute later" reads as a match with
+// a time shift rather than as a complete divergence.
 //
-// Ничего не пересчитывается: времена, команды и токены берутся из
-// сохранённых протоколов.
+// Nothing is recomputed: times, commands and tokens are taken from the
+// saved transcripts.
 // ---------------------------------------------------------------------
 
-// Решения прогона из его протокола: время наблюдения, команда, токены.
+// A run's decisions from its transcript: observation time, command, tokens.
 function diffSteps(runId) {
   const tr = TRACES[runId];
   if (!tr && typeof mineDiffSteps === "function") {
@@ -1126,7 +1142,7 @@ function diffSteps(runId) {
   })).filter(s => s.aid);
 }
 
-// Наибольшая общая подпоследовательность по идентификаторам команд.
+// Longest common subsequence over the action identifiers.
 function diffAlign(A, B) {
   const n = A.length, m = B.length;
   const dp = [];
@@ -1152,12 +1168,13 @@ function diffAlign(A, B) {
   return rows;
 }
 
-// Расхождение показывается парами, а не двумя списками подряд.
+// The divergence is shown in pairs rather than as two lists in a row.
 //
-// Выравнивание по НОП даёт блоки «только A», потом «только B», и времена в
-// двух половинах идут вразнобой: у A девятая минута, у B первая. Внутри
-// блока расхождения решения ставятся рядом по порядку, поэтому в каждом
-// столбце время возрастает, а строка читается как «A сделал это, B то».
+// Aligning by LCS gives blocks of "A only", then "B only", and the times
+// in the two halves run out of step: A's ninth minute against B's first.
+// Inside a divergence block the decisions are placed side by side in
+// order, so time rises down each column and a row reads as "A did this,
+// B did that".
 function diffPairBlocks(rows) {
   const out = [];
   let i = 0;
@@ -1177,11 +1194,11 @@ function diffPairBlocks(rows) {
   return out;
 }
 
-// Прогоны, у которых есть протокол, по задачам.
+// Runs that have a transcript, by task.
 function diffRuns(sid) {
   const pub = MANIFEST.runs.filter(r => r.scenario === sid && r.watchable);
-  // Своё прохождение сравнимо с любым прогоном: установка та же, набор
-  // команд тот же, выравнивание идёт по командам.
+  // A person's run is comparable with any run: the plant is the same, the
+  // command set is the same, and the alignment goes by commands.
   const mine = (typeof mineDiffRuns === "function") ? mineDiffRuns(sid) : [];
   return pub.concat(mine);
 }
@@ -1215,12 +1232,13 @@ function showDiff(sid, idA, idB) {
     sel("dfb", DIFF.b, runs.map(r => [r.id, runLabel(r)])) +
     "</div>";
 
-  // Итоги обоих прогонов рядом: расхождение в решениях интересно ровно
-  // потому, что исходы разные.
-  // Исход берётся из кодов прогона, а не из готовой строки манифеста: в
-  // отчётах ущерб пишется как МАЙn, а в тренажёре -- кодами КАТ/УЩ (и
-  // CAT/MAJ по-английски), и смешивать два обозначения в одной таблице
-  // нельзя.
+  // The results of both runs side by side: a divergence in decisions is
+  // interesting precisely because the outcomes differ.
+  //
+  // The outcome is taken from the run's codes rather than from the manifest's
+  // ready-made string: reports write damage as МАЙn while the trainer uses
+  // the КАТ/УЩ codes (and CAT/MAJ in English), and mixing two notations in
+  // one table is not allowed.
   const head = r => "<b>" + esc(runLabel(r)) + "</b> · " + L("score") + " " +
     r.score + " · " +
     (r.CAT.length ? "<span class='bad'>" + outcomeText(r) + "</span>"
@@ -1244,9 +1262,9 @@ function showDiff(sid, idA, idB) {
   const ponr = sc ? sc.ponr_cat_s : null;
   let ponrShown = (ponr === null || ponr === undefined);
   rows.forEach(x => {
-    // Разделитель ставится перед первым решением, которое уже за точкой
-    // невозврата: выравнивание идёт по командам, поэтому черта проводится
-    // по первому из двух столбцов, который её пересёк.
+    // The separator is placed before the first decision that is already past
+    // the point of no return: the alignment goes by commands, so the line is
+    // drawn by whichever of the two columns crossed it first.
     const t = Math.min(x.a ? x.a.t : Infinity, x.b ? x.b.t : Infinity);
     if (!ponrShown && t > ponr) {
       ponrShown = true;
@@ -1263,8 +1281,8 @@ function showDiff(sid, idA, idB) {
       : "<td class='tm'></td><td class='na'></td>";
     h += "<tr class='" + cls + "'>" + cell(x.a) + cell(x.b) + "</tr>";
   });
-  // Чем кончилось -- в той же таблице и под своим столбцом: ради этого
-  // расхождение в решениях и смотрят.
+  // How it ended -- in the same table and under its own column: that is what
+  // one looks at a decision divergence for.
   const endCell = r => {
     const code = r.CAT.length ? r.CAT.map(outcomeCode).join("+") : "";
     return "<td class='tm'>" + hhmmss(r.t_end_s) + "</td><td>" +
@@ -1285,7 +1303,7 @@ function showDiff(sid, idA, idB) {
 let DIFF = { sid: null, a: null, b: null };
 
 // ---------------------------------------------------------------------
-// Сравнение
+// Comparison
 // ---------------------------------------------------------------------
 
 function showCompare() {
@@ -1295,8 +1313,8 @@ function showCompare() {
   h += "<th>" + L("mean") + "</th><th>" + L("regGap") + "</th></tr>";
   let lastKind = null;
   MANIFEST.agents.forEach(a => {
-    // Опубликованная матрица и свои прогоны -- разные вещи, и это должно
-    // быть видно в таблице, а не только в описании.
+    // The published matrix and the visitor's own runs are different things,
+    // and that has to be visible in the table, not only in the description.
     if (a.kind === "user" && lastKind !== "user") {
       h += "<tr class='userhead'><td class='nm'>" + L("userRuns") +
            "</td><td colspan='" + (sids.length + 2) + "' class='mut'>" +
@@ -1319,8 +1337,8 @@ function showCompare() {
            " title='" + badge + "'>" + r.score +
            (r.watchable ? "<span class='wm'>▸</span>" : "") + "</td>";
     });
-    // Неполная строка помечается: её среднее нельзя ставить рядом с полным
-    // как равное.
+    // An incomplete row is marked: its mean must not stand next to a complete
+    // one as an equal.
     const part = !a.complete;
     h += "<td class='mean" + (part ? " part" : "") + "'>" +
          (a.score_mean == null ? "—" : a.score_mean) +
@@ -1333,8 +1351,8 @@ function showCompare() {
           : (a.id === "regulation" ? L("base")
              : (a.reg_gap > 0 ? "+" : "") + a.reg_gap)) + "</td></tr>";
   });
-  // Свои прогоны -- теми же правилами, что и опубликованные строки, но
-  // отдельным разделом: это не часть опубликованного набора.
+  // The visitor's own runs follow the same rules as the published rows, but
+  // in a section of their own: they are not part of the published set.
   const mine = (typeof mineAgents === "function") ? mineAgents() : [];
   if (mine.length) {
     h += "<tr class='minehead'><td class='nm'>" + L("mineHead") +
@@ -1388,8 +1406,8 @@ function showCompare() {
   }
   h += "<p><button class='lnk' id='diffb'>" + L("diffOpen") + "</button></p>";
   h += "<p class='mut'>" + L("scoreNote") + "</p>";
-  // Пометка сборки: если в таблицу добавлены свои прогоны, об этом должно
-  // быть сказано на самой таблице, а не только в команде сборки.
+  // Build note: if runs of the repo owner's own were added to the table, the
+  // table itself has to say so, not only the build command.
   if (MANIFEST.label) {
     h += "<p class='qbadge' style='display:inline-block'>" +
          esc(MANIFEST.label) + "</p>";
@@ -1425,7 +1443,7 @@ function showCompare() {
 }
 
 // ---------------------------------------------------------------------
-// Режим экрана задачи: игра или просмотр
+// Mode of the task screen: play or replay
 // ---------------------------------------------------------------------
 
 function applyMode() {
@@ -1433,16 +1451,17 @@ function applyMode() {
   const q = mode === "quick";
   $("#watchwrap").style.display = w ? "" : "none";
   $("#quickwrap").style.display = q ? "" : "none";
-  // Доигрывание -- только в полной задаче: в пробе время и так
-  // проматывается, в записи для этого есть «до конца».
+  // Playing out is only for the full task: in the quick try time is
+  // fast-forwarded anyway, and a recording has "to the end" for that.
   const po = $("#playoutb");
   if (po) po.style.display = (!w && !q) ? "" : "none";
-  // Полоска прохождения -- человеку. В просмотре записи её роль играет
-  // полоса решений, там она подробнее.
+  // The progress strip is for the person. In a replay its role is played by
+  // the decision timeline, which says more.
   const pb = $("#playbar");
   if (pb) pb.style.display = w ? "none" : "block";
-  // Каталог из 133 команд скрыт и при просмотре записи, и в быстрой пробе:
-  // там команды подаёт запись, здесь -- выбор из четырёх.
+  // The catalog of 133 commands is hidden both in a replay and in the quick
+  // try: there the commands come from the recording, here from a choice of
+  // four.
   $("#cmdcard").style.display = (w || q) ? "none" : "";
   $("#finishb").style.display = (w || q) ? "none" : "";
   $("#rawb").style.display = (w || q) ? "none" : "";

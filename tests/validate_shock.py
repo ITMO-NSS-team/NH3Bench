@@ -1,21 +1,24 @@
 # -*- coding: utf-8 -*-
 """
-Валидация V4-CIHS (docs/VALIDATION.md): огибающая конденсационного удара
-против имеющихся опубликованных данных.
+Validation V4-CIHS (docs/VALIDATION.md): the envelope of
+condensation-induced shock against the published data available.
 
-Свип модели condensation_shock по сетке условий (давление змеевика в оттайке ×
-температура подачи) на геометрии ВО-3 из конфигурации. Точки (скорость столба →
-пик давления) сравниваются с тем, что доступно без покупки отчётов:
+A sweep of the condensation_shock model over a grid of conditions
+(defrost coil pressure x feed temperature) on the EV-03 geometry from
+the configuration. The points (column velocity -> pressure peak) are
+compared with what is available without buying reports:
 
-  * полевой диапазон разрушающих ударов, цитируемый CSB по авариям промышленного
-    холода: 100...700 бар (Safety Bulletin 2010-13-A-AL и обзоры IIAR);
-  * пиковое значение ~4000 psia (276 бар), измеренное/рассчитанное для клапана
-    горячего пара варочного котла (ASME J. Pressure Vessel Technol. 145(4), 2023);
-  * теоретическая прямая Жуковского rho*a*v с адиабатическим K_s из NIST --
-    после исправления K модель обязана лечь на неё тождественно.
+  * the field range of destructive shocks cited by the CSB for
+    industrial refrigeration accidents: 100...700 bar (Safety Bulletin
+    2010-13-A-AL and IIAR reviews);
+  * a peak value of about 4000 psia (276 bar), measured/computed for a
+    hot-gas valve of a cooking kettle (ASME J. Pressure Vessel Technol.
+    145(4), 2023);
+  * the theoretical Joukowsky line rho*a*v with the adiabatic K_s from
+    NIST -- after the K fix the model must lie on it identically.
 
-Запуск:  python tests/validate_shock.py
-Итог:    results/validation/shock_envelope.json + .png
+Usage:  python tests/validate_shock.py
+Result: results/validation/shock_envelope.json plus .png
 """
 
 import sys, os, json
@@ -36,16 +39,16 @@ OUT_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
                        "results", "validation")
 os.makedirs(OUT_DIR, exist_ok=True)
 
-# Полевые ориентиры (см. модульный докстринг).
-FIELD_LO, FIELD_HI = 100.0, 700.0        # бар, диапазон CSB
+# Field reference points (see the module docstring).
+FIELD_LO, FIELD_HI = 100.0, 700.0        # bar, the CSB range
 ASME_2023_BAR = 275.8                    # 4000 psia
-MILLARD_COIL_BAR_RANGE = (8.0, 11.0)     # давление горячего пара в оттайке
+MILLARD_COIL_BAR_RANGE = (8.0, 11.0)     # hot-gas pressure during defrost
 
 
 def main():
-    ev = DEFAULT.evaporators[2]          # ВО-3 — сценарная геометрия S1
+    ev = DEFAULT.evaporators[2]          # EV-03 -- the geometry of scenario S1
     rows = []
-    # Сетка: давление змеевика 4...12 бар изб. пара оттайки, подача -40...-28 C
+    # Grid: coil pressure 4...12 bar gauge of defrost vapour, feed -40...-28 C
     for P_coil_bar in np.linspace(4.0, 12.0, 9):
         for T_feed_C in (-40.0, -36.0, -32.0, -28.0):
             P_feed = float(pr.Psat(273.15 + T_feed_C))
@@ -56,7 +59,7 @@ def main():
                               wall=ev.pipe_wall, sigma_y=ev.pipe_sigma_y)
             res = condensation_shock(
                 seg, P_coil=P_coil, P_feed=P_feed,
-                T_metal=pr.Tsat(P_coil) + 30.0,      # прогретый металл
+                T_metal=pr.Tsat(P_coil) + 30.0,      # warmed metal
                 m_liq_in_rate=0.5, dt=0.5)
             if res["dv"] <= 0:
                 continue
@@ -69,7 +72,8 @@ def main():
     v = np.array([r["v_ms"] for r in rows])
     pk = np.array([r["P_peak_bar"] for r in rows])
 
-    # Тождество Жуковского с NIST-свойствами при -40 C (референсная прямая).
+    # The Joukowsky identity with NIST properties at -40 C (the reference
+    # line).
     P40 = float(pr.Psat(233.15))
     rho40, K40 = float(pr.rho_l(P40)), float(pr.K_liq(P40))
     a40 = wave_speed(DEFAULT.evaporators[2].pipe_D,
@@ -77,7 +81,7 @@ def main():
     vv = np.linspace(0, v.max() * 1.05, 50)
     jouk = rho40 * a40 * vv / 1e5
 
-    # Миллардовский коридор условий (оттайка 8-11 бар, подача -40 C)
+    # The Millard corridor of conditions (defrost 8-11 bar, feed -40 C)
     mill = [r for r in rows if MILLARD_COIL_BAR_RANGE[0] <= r["P_coil_bar"]
             <= MILLARD_COIL_BAR_RANGE[1] and r["T_feed_C"] == -40.0]
 
@@ -96,7 +100,7 @@ def main():
         "rows": rows,
     }
 
-    # Рисунок: точки модели, прямая Жуковского, полевые ориентиры.
+    # Figure: the model points, the Joukowsky line, the field reference points.
     fig, ax = plt.subplots(figsize=(7, 4.6))
     ax.axhspan(FIELD_LO, FIELD_HI, color="#f2c1a0", alpha=0.35,
                label="полевой диапазон CSB (100–700 бар)")

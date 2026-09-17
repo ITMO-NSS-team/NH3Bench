@@ -1,8 +1,8 @@
 # Evaluating a model on NH3Bench
 
 A practical guide for running your own model against the benchmark. For why the
-benchmark is built this way, see `docs/DESIGN-original-ru.md` (Russian) and the
-paper in `paper/`. For the metric definitions in full, `docs/METRICS.md`.
+benchmark is built this way, see `docs/METRICS.md`, `docs/SCENARIOS.md` and the
+paper. For the metric definitions in full, `docs/METRICS.md`.
 
 ---
 

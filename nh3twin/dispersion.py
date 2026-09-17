@@ -1,18 +1,20 @@
 """
-Рассеивание аммиака и экспозиция персонала.
+Ammonia dispersion and personnel exposure.
 
-Два уровня:
-  1. Помещения (машзал, цех) -- модель идеального перемешивания с вентиляцией
-     и поглощением водяной завесой. Даёт концентрацию для газоанализаторов и
-     для расчёта дозы операторов.
-  2. Площадка -- гауссова факельная модель для концентрации на границе
-     (критерий CAT-1 по ERPG-2).
+Two levels:
+  1. Rooms (machine room, production hall) -- a perfectly mixed model
+     with ventilation and absorption by a water curtain. It gives the
+     concentration for the gas detectors and for the operators' dose.
+  2. The site -- a Gaussian plume model for the fenceline concentration
+     (the CAT-1 criterion against ERPG-2).
 
-Сознательное упрощение: не моделируется отрицательная плавучесть аэрозоля
-аммиака (тяжёлое облако). Для аварий с перегретой жидкостью это занижает
-концентрацию у земли вблизи источника. Ограничение зафиксировано в разделе
-"Известные упрощения" README и не влияет на разделимость политик в сценариях,
-поскольку критерии CAT откалиброваны на этой же модели.
+A deliberate simplification: the negative buoyancy of an ammonia aerosol
+(a heavy cloud) is not modelled. For accidents with superheated liquid
+that underestimates the concentration near the ground close to the
+source. The limitation is recorded in the "Known simplifications"
+section of the README and does not affect how well the policies separate
+in the scenarios, because the CAT criteria were calibrated on this same
+model.
 """
 
 from __future__ import annotations
@@ -22,7 +24,7 @@ import math
 from . import props as pr
 
 
-# Коэффициенты дисперсии Бриггса для сельской местности, класс устойчивости D.
+# Briggs dispersion coefficients for rural terrain, stability class D.
 _BRIGGS = {
     "A": (0.22, 0.0001, 0.20, 0.0),
     "B": (0.16, 0.0001, 0.12, 0.0),
@@ -44,10 +46,10 @@ def sigma_yz(x: float, stability: str = "D") -> tuple:
 def plume_concentration(Q: float, x: float, u: float, H: float,
                         stability: str = "D") -> float:
     """
-    Концентрация по оси факела на уровне земли, кг/м3.
+    Plume centreline concentration at ground level, kg/m3.
 
-    Q -- расход источника, кг/с; x -- расстояние, м; u -- скорость ветра, м/с;
-    H -- эффективная высота источника, м.
+    Q -- source rate, kg/s; x -- distance, m; u -- wind speed, m/s;
+    H -- effective source height, m.
     """
     if Q <= 0.0:
         return 0.0
@@ -58,19 +60,19 @@ def plume_concentration(Q: float, x: float, u: float, H: float,
 
 @dataclass
 class Zone:
-    """Помещение с идеальным перемешиванием."""
+    """A perfectly mixed room."""
     tag: str
     V: float
     vent_normal: float
     vent_emergency: float
-    c: float = 0.0                  # кг/м3, фактическая концентрация
-    c_detector: float = 0.0         # кг/м3, показание газоанализатора с лагом
+    c: float = 0.0                  # kg/m3, the actual concentration
+    c_detector: float = 0.0         # kg/m3, the detector reading, with a lag
     detector_lag: float = 12.0
     emergency_vent: bool = False
     water_curtain: bool = False
-    detector_failed: bool = False   # отказ газоанализатора (F-SENSOR)
-    detector_bias: float = 0.0      # ppm, смещение при отказе типа drift
-    detector_scale: float = 1.0     # множитель показания (разкалибровка)
+    detector_failed: bool = False   # gas detector fault (F-SENSOR)
+    detector_bias: float = 0.0      # ppm, offset for a drift fault
+    detector_scale: float = 1.0     # reading multiplier (miscalibration)
 
     @property
     def ppm(self) -> float:
@@ -78,7 +80,7 @@ class Zone:
 
     @property
     def ppm_indicated(self) -> float:
-        """Что видит SCADA. При отказе датчика расходится с фактом."""
+        """What SCADA sees. With a sensor fault it disagrees with the fact."""
         if self.detector_failed:
             return max(self.detector_bias, 0.0)
         return (pr.ppm_from_kg_per_m3(self.c_detector) * self.detector_scale
@@ -88,9 +90,10 @@ class Zone:
         return self.vent_emergency if self.emergency_vent else self.vent_normal
 
     def derivative(self, m_release: float) -> tuple:
-        """d(c)/dt и d(c_detector)/dt."""
+        """d(c)/dt and d(c_detector)/dt."""
         removal = self.vent_rate() / self.V
-        # Водяная завеса поглощает аммиак: аммиак крайне растворим в воде.
+        # A water curtain absorbs ammonia: ammonia is extremely soluble in
+        # water.
         if self.water_curtain:
             removal += 0.045
         dc = m_release / self.V - removal * self.c
@@ -100,7 +103,7 @@ class Zone:
 
 @dataclass
 class Operator:
-    """Бот-оператор как объект риска: положение, СИЗ, накопленная доза."""
+    """A bot operator as an object at risk: position, PPE, accumulated dose."""
     op_id: str
     zone: str = "CONTROL_ROOM"
     ppe: tuple = ()
@@ -110,7 +113,7 @@ class Operator:
 
     @property
     def protection_factor(self) -> float:
-        """Коэффициент защиты СИЗ по вдыхаемой концентрации."""
+        """PPE protection factor against the inhaled concentration."""
         if "SCBA" in self.ppe:
             return 10000.0
         if "FULL_FACE_RESPIRATOR" in self.ppe:
@@ -128,9 +131,9 @@ class Operator:
 
 
 class DispersionModel:
-    """Сборка: зоны + площадка + операторы."""
+    """Assembly: zones plus the site plus the operators."""
 
-    # Зоны без газового контроля -- операторы там в безопасности.
+    # Zones without gas monitoring -- operators are safe there.
     SAFE_ZONES = ("CONTROL_ROOM", "OUTSIDE", "OFFICE", "ASSEMBLY_POINT")
 
     def __init__(self, cfg):
@@ -144,9 +147,9 @@ class DispersionModel:
                          cfg.hall.vent_emergency),
         }
         self.operators: dict = {}
-        self.m_released_total = 0.0       # кг, суммарный выброс в атмосферу
-        self.m_released_outdoor = 0.0     # кг, выброс сразу наружу (кровля)
-        self.release_rate = 0.0           # кг/с, текущий суммарный дебит
+        self.m_released_total = 0.0       # kg, total release to the atmosphere
+        self.m_released_outdoor = 0.0     # kg, released straight outdoors (the roof)
+        self.release_rate = 0.0           # kg/s, the current total rate
         self.release_rate_outdoor = 0.0
         self.fenceline_ppm = 0.0
         self.plume_model_valid = True
@@ -160,9 +163,9 @@ class DispersionModel:
 
     def step(self, dt: float, releases: dict):
         """
-        releases: {zone_or_'OUTDOOR': расход, кг/с}
-        Интегрируется явным Эйлером -- уравнения зон нежёсткие
-        (постоянная времени V/Q_vent >= 100 с).
+        releases: {zone_or_'OUTDOOR': rate, kg/s}
+        Integrated with explicit Euler -- the zone equations are not stiff
+        (time constant V/Q_vent >= 100 s).
         """
         self.release_rate = sum(releases.values())
         self.release_rate_outdoor = releases.get("OUTDOOR", 0.0)
@@ -176,8 +179,8 @@ class DispersionModel:
         self.m_released_total += self.release_rate * dt
         self.m_released_outdoor += self.release_rate_outdoor * dt
 
-        # Наружу уходит и то, что выбрасывается напрямую, и то, что вытягивает
-        # вентиляция из помещений.
+        # What goes outdoors is both what is released directly and what the
+        # ventilation pulls out of the rooms.
         q_out = self.release_rate_outdoor
         for zone in self.zones.values():
             q_out += zone.c * zone.vent_rate()
@@ -186,10 +189,10 @@ class DispersionModel:
             q_out, self.cfg.site.fence_distance, self.wind_speed,
             self.cfg.site.release_height, self.cfg.site.stability_class)
         self.fenceline_ppm = pr.ppm_from_kg_per_m3(c_fence)
-        # Гауссова модель справедлива для разбавленных примесей. При массовой
-        # доле выше ~0.1 % облако становится тяжёлым и модель занижает
-        # концентрацию у земли вблизи источника и завышает вдали. Флаг
-        # выставляется, чтобы результат не трактовался как точный.
+        # The Gaussian model holds for dilute admixtures. Above a mass fraction
+        # of about 0.1 % the cloud becomes heavy and the model underestimates
+        # the ground-level concentration near the source while overestimating
+        # it far away. The flag is set so that the result is not read as exact.
         self.plume_model_valid = c_fence < 1.2e-3
         self.fenceline_peak_ppm = max(self.fenceline_peak_ppm, self.fenceline_ppm)
         if self.fenceline_ppm > pr.ERPG_2:
@@ -200,20 +203,22 @@ class DispersionModel:
                 if op.zone in self.zones else 0.0
             op.accumulate(ppm, dt)
 
-    # --- Критерии катастрофических состояний -----------------------------
+    # --- Criteria for catastrophic states ---------------------------------
 
     def cat1(self) -> bool:
-        """Токсический выброс за пределы площадки."""
+        """A toxic release beyond the site boundary."""
         return (self.m_released_total > 100.0
                 or self.fenceline_above_erpg2_s > 300.0)
 
     def cat2(self) -> bool:
-        """Тяжёлая экспозиция персонала."""
+        """Severe exposure of personnel."""
         return any(op.incapacitated or op.dose_ppm_min > 1500.0
                    for op in self.operators.values())
 
     def cat5(self) -> bool:
-        """Дефлаграция: концентрация в помещении в пределах воспламенения."""
+        """
+        Deflagration: the room concentration is within the flammability limits.
+        """
         for zone in self.zones.values():
             vol_frac = zone.ppm / 1e6
             if pr.LFL_VOL <= vol_frac <= pr.UFL_VOL:

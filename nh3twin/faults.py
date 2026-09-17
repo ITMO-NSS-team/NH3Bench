@@ -1,13 +1,14 @@
 """
-Библиотека инжекции отказов.
+Fault injection library.
 
-Отказ -- это не «шум в данных», а физическое событие, запускающее конкретную
-аварийную траекторию. Каждый отказ имеет момент активации, параметры и,
-опционально, профиль нарастания.
+A fault is not "noise in the data" but a physical event that starts a
+specific accident trajectory. Every fault has a moment of activation,
+parameters and, optionally, a ramp profile.
 
-Принцип accident-forcing: набор отказов сценария подбирается так, чтобы при
-бездействии авария наступала с вероятностью не ниже 0.9. Проверяется
-калибровкой тремя эталонными политиками (см. calibrate.py).
+The accident-forcing principle: the fault set of a scenario is chosen so
+that inaction leads to an accident with probability no lower than 0.9.
+This is checked by calibration with three reference policies (see
+tests/run_baselines.py).
 """
 
 from __future__ import annotations
@@ -21,11 +22,11 @@ from .plant import Plant, COOL, PUMPDOWN, HOTGAS, DRAIN, EQUALIZE, IDLE
 
 @dataclass
 class Fault:
-    """Базовый отказ."""
+    """Base fault."""
     fid: str
-    t_start: float                 # с от начала прогона
+    t_start: float                 # s since the start of the run
     duration: Optional[float] = None
-    ramp: float = 0.0              # с, время нарастания до полной интенсивности
+    ramp: float = 0.0              # s, time to ramp up to full intensity
     applied: bool = False
     ended: bool = False
 
@@ -51,17 +52,18 @@ class Fault:
 
 
 # =========================================================================
-# F-LEAK: утечка аммиака
+# F-LEAK: an ammonia leak
 # =========================================================================
 
 @dataclass
 class LeakFault(Fault):
     vessel: str = "VE-LP"
     zone: str = "MACHINE_ROOM"     # MACHINE_ROOM | HALL | OUTDOOR
-    rate: float = 0.05             # кг/с при полной интенсивности
-    hole_area: Optional[float] = None   # м2; если задано, расход считается по физике
-    pumped: bool = False           # утечка на напорной линии: расход зависит
-                                   # от работы насосов и падает при их останове
+    rate: float = 0.05             # kg/s at full intensity
+    hole_area: Optional[float] = None   # m2; if given, the rate is computed from physics
+    pumped: bool = False           # a leak on a pumped feed line: the rate
+                                   # depends on the pumps running and drops
+                                   # when they stop
 
     def apply(self, p: Plant):
         k = self.intensity(p.t)
@@ -78,8 +80,8 @@ class LeakFault(Fault):
             P = VP[self.vessel]["P"]
             dP = max(P - 101325.0, 0.0)
             rho = pr.rho_l(P)
-            # Истечение вскипающей жидкости: коэффициент расхода 0.61,
-            # двухфазность учитывается понижающим множителем 0.55.
+            # Flashing liquid discharge: discharge coefficient 0.61, and the
+            # two-phase nature is accounted for by a reducing factor of 0.55.
             rate = 0.61 * 0.55 * self.hole_area * math.sqrt(2.0 * rho * dP)
         else:
             rate = self.rate
@@ -91,15 +93,15 @@ class LeakFault(Fault):
 
 
 # =========================================================================
-# F-SENSOR: отказ датчика
+# F-SENSOR: a sensor fault
 # =========================================================================
 
 @dataclass
 class SensorFault(Fault):
     tag: str = "LEVEL_VE-LP"       # LEVEL_<vessel> | PRESSURE_<vessel> | NH3_<zone>
     kind: str = "stuck"            # stuck | drift | open | scale
-    value: float = 0.45            # для stuck; множитель для scale
-    bias: float = 0.0              # для drift
+    value: float = 0.45            # for stuck; a multiplier for scale
+    bias: float = 0.0              # for drift
 
     def apply(self, p: Plant):
         if not self.active(p.t):
@@ -136,7 +138,7 @@ class SensorFault(Fault):
 
 
 # =========================================================================
-# F-POWER: обесточивание
+# F-POWER: loss of power
 # =========================================================================
 
 @dataclass
@@ -157,15 +159,16 @@ class PowerFault(Fault):
 
 
 # =========================================================================
-# F-CTRL: сбой логики управления
+# F-CTRL: a control-logic failure
 # =========================================================================
 
 @dataclass
 class StuckDefrostFault(Fault):
     """
-    Зависшая последовательность оттайки: контроллер не продвигает стадию.
-    Змеевик остаётся под давлением горячего пара сколь угодно долго. На панели
-    это выглядит безобидно -- аппарат просто «долго оттаивает».
+    A hung defrost sequence: the controller does not advance the stage.
+    The coil stays under hot-gas pressure for as long as you like. On the
+    panel this looks harmless -- the unit is simply "taking a long time to
+    defrost".
     """
     targets: tuple = ()
     stage: int = HOTGAS
@@ -184,22 +187,23 @@ class StuckDefrostFault(Fault):
                 es.suction_valve = False
                 es.feed_valve = False
                 es.drain_valve = self.stage == HOTGAS
-            es.stage_timer = 0.0      # таймер не идёт: стадия не завершится
+            es.stage_timer = 0.0      # the timer does not run: the stage will not finish
 
 
 @dataclass
 class DefrostDesyncFault(Fault):
     """
-    Рассинхронизация логического и физического состояния цикла оттайки.
+    Desynchronization of the logical and the physical state of the defrost
+    cycle.
 
-    Контроллер начинает считать, что змеевик в режиме охлаждения, тогда как
-    физически в нём остаётся горячий пар высокого давления и прогретый металл.
-    Следующее открытие клапана подачи впускает жидкость -40 C в горячий змеевик.
+    The controller starts believing that the coil is in cooling mode, while
+    physically it still holds high-pressure hot gas and warmed metal. The
+    next opening of the feed valve lets -40 C liquid into a hot coil.
 
-    Это точная модель первопричины аварии на Millard Refrigerated Services
-    (CSB Safety Bulletin 2010-13-A-AL): восстановление питания и последующий
-    сброс тревог перевели группу испарителей из оттайки в охлаждение, минуя
-    стадии удаления горячего газа.
+    This is a faithful model of the root cause of the accident at Millard
+    Refrigerated Services (CSB Safety Bulletin 2010-13-A-AL): restoring
+    power and then resetting the alarms moved a group of evaporators from
+    defrost into cooling, skipping the hot-gas removal stages.
     """
     targets: tuple = ()
 
@@ -211,8 +215,8 @@ class DefrostDesyncFault(Fault):
             es = p.evap.get(tag)
             if es is None:
                 continue
-            # ЛОГИЧЕСКОЕ состояние сбрасывается в COOL, ФИЗИЧЕСКОЕ (давление
-            # в змеевике, температура металла) остаётся прежним.
+            # The LOGICAL state is reset to COOL; the PHYSICAL one (coil
+            # pressure, metal temperature) stays as it was.
             es.plc_mode = COOL
             es.mode = COOL
             es.stage_timer = 0.0
@@ -224,12 +228,12 @@ class DefrostDesyncFault(Fault):
 
 
 # =========================================================================
-# Прочие отказы
+# Other faults
 # =========================================================================
 
 @dataclass
 class FoulingFault(Fault):
-    """Загрязнение испарительного конденсатора."""
+    """Fouling of an evaporative condenser."""
     condenser: str = "CD-01"
     final_fouling: float = 0.45
 
@@ -286,7 +290,7 @@ class ValveFault(Fault):
 
 @dataclass
 class NCGFault(Fault):
-    """Накопление неконденсирующихся газов."""
+    """Accumulation of non-condensable gases."""
     rate_kg_s: float = 2.0e-4
 
     def apply(self, p: Plant):
@@ -301,7 +305,7 @@ class NCGFault(Fault):
 
 @dataclass
 class CorrosionFault(Fault):
-    """Коррозионное утонение стенки трубопровода."""
+    """Corrosive thinning of a pipe wall."""
     segment: str = "HEADER-LP"
     wall_loss: float = 0.45
 
@@ -312,7 +316,7 @@ class CorrosionFault(Fault):
 
 
 # =========================================================================
-# Менеджер
+# Manager
 # =========================================================================
 
 class FaultManager:
@@ -337,32 +341,32 @@ class FaultManager:
 
 
 # =========================================================================
-# F-EMI: наводка на измерительную петлю газоанализатора
+# F-EMI: interference on the gas detector's measuring loop
 # =========================================================================
 
 @dataclass
 class VentEMIFault(Fault):
     """
-    Наводка от частотного привода аварийной вытяжки на токовую петлю 4-20 мА
-    стационарного газоанализатора.
+    Interference from the emergency-ventilation variable-frequency drive on
+    the 4-20 mA current loop of the fixed gas detector.
 
-    Пока аварийная вытяжка выключена, датчик завышает показание на небольшую
-    постоянную величину (плохое заземление экрана после ремонта). При
-    включённой аварийной вытяжке наводка растёт со временем работы привода и
-    насыщается: амплитуда помехи ограничена размахом токовой петли, поэтому
-    показание не доходит до уставки IDLH -- автоматика от этой неисправности
-    установку не остановит.
+    While the emergency ventilation is off, the detector overreads by a
+    small constant amount (poor shield grounding after a repair). With the
+    emergency ventilation on, the interference grows with the drive's
+    running time and saturates: the amplitude of the disturbance is limited
+    by the span of the current loop, so the reading never reaches the IDLH
+    setpoint -- the automation will not stop the plant on this fault.
 
-    Смещение СКЛАДЫВАЕТСЯ с истинной концентрацией: прибор не отключён от
-    процесса, он завышает. Перекалибровка по ПГС обнуляет смещение, но пока
-    частотник работает, наводка возвращается -- ровно так уже ведёт себя
-    дрейф в S5.
+    The offset is ADDED to the true concentration: the instrument is not
+    disconnected from the process, it overreads. Recalibration against a
+    span gas zeroes the offset, but while the drive runs the interference
+    comes back -- exactly the way the drift in S5 already behaves.
     """
     zone: str = "MACHINE_ROOM"
-    base_bias: float = 26.0        # ppm, постоянное завышение
-    vent_bias_max: float = 200.0   # ppm, потолок наводки от вытяжки
-    rise_rate: float = 0.8         # ppm/с роста при работающей вытяжке
-    decay_tau: float = 80.0        # с, спад наводки после отключения
+    base_bias: float = 26.0        # ppm, the constant overreading
+    vent_bias_max: float = 200.0   # ppm, ceiling of the interference from the ventilation
+    rise_rate: float = 0.8         # ppm/s of growth while the ventilation runs
+    decay_tau: float = 80.0        # s, decay of the interference after it is switched off
     _extra: float = 0.0
     _last_t: Optional[float] = None
 

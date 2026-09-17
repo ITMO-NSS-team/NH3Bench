@@ -1,27 +1,31 @@
 """
-Калибровка точки невозврата (t_PONR) по сценариям.
+Calibration of the point of no return (t_PONR) per scenario.
 
-Определение из проектного документа: t_PONR -- последний момент, в который
-эталонная последовательность действий ещё предотвращает аварию. Всё, что
-агент делает позже, на исход уже не влияет; именно поэтому метрики
-Margin-to-PONR и Overthinking Cost без этой величины не существуют.
+The definition (docs/METRICS.md): t_PONR is the last moment at
+which the reference sequence of actions still prevents the accident.
+Anything the agent does later no longer affects the outcome; that is
+precisely why the Margin-to-PONR and Overthinking Cost metrics do not
+exist without this quantity.
 
-Способ измерения прямой: политика бездействует до момента T, затем
-разыгрывает эталонный сценарий. Двоичный поиск по T находит наибольшее T,
-при котором катастрофа ещё не наступает. Проверяются два порога:
+The way of measuring it is direct: the policy does nothing until moment
+T and then plays the reference scenario. A binary search over T finds
+the largest T at which the catastrophe still does not happen. Two
+thresholds are checked:
 
-    t_PONR(CAT) -- позже него эталон уже не спасает от катастрофы;
-    t_PONR(MAJ) -- позже него эталон уже не удерживает прогон чистым,
-                   то есть спасти можно, но не даром.
+    t_PONR(CAT) -- later than this the reference no longer saves from a
+                   catastrophe;
+    t_PONR(MAJ) -- later than this the reference no longer keeps the run
+                   clean, i.e. it can still be saved, but not for free.
 
-Второй порог наступает раньше и определён во всех сценариях, включая те,
-где бездействие катастрофы не вызывает (S3, S5). Публикуются оба.
+The second threshold comes earlier and is defined in every scenario,
+including those where inaction causes no catastrophe (S3, S5). Both are
+published.
 
-Запуск (долгий, порядка получаса на сценарий):
+Usage (long, on the order of half an hour per scenario):
 
     python3 tests/calibrate_ponr.py --scenarios S1,S2,S3,S4,S5
 
-Результат пишется в results/ponr.json после каждого сценария.
+The result is written to results/ponr.json after every scenario.
 """
 
 import argparse
@@ -41,7 +45,7 @@ OUT = os.path.join(ROOT, "results", "ponr.json")
 
 
 class DelayedOracle(Policy):
-    """Бездействие до t_start, затем эталонный плейбук."""
+    """Inaction until t_start, then the reference playbook."""
     name = "delayed_oracle"
 
     def __init__(self, t_start: float):
@@ -66,12 +70,13 @@ def probe(sid, t_start, seed=1):
 
 def bisect(sid, ok_fn, hi, tol=30.0, seed=1, log=print):
     """
-    Наибольшее T в [0, hi], при котором ok_fn(исход) истинно.
+    The largest T in [0, hi] at which ok_fn(outcome) is true.
 
-    Предполагается монотонность: чем позже начато вмешательство, тем хуже
-    исход. Физически это не гарантировано абсолютно (позднее действие может
-    случайно попасть в более благоприятную фазу), поэтому монотонность
-    проверяется на границах и нарушение печатается, а не замалчивается.
+    Monotonicity is assumed: the later an intervention starts, the worse the
+    outcome. Physically that is not absolutely guaranteed (a late action may
+    happen to land in a more favourable phase), so monotonicity is checked
+    at the ends and a violation is printed rather than passed over in
+    silence.
     """
     lo_res = probe(sid, 0.0, seed)
     if not ok_fn(lo_res):
@@ -104,8 +109,8 @@ def main():
     ap.add_argument("--scenarios", default="S1,S2,S3,S4,S5")
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--tol", type=float, default=30.0)
-    # Свой файл на процесс: сценарии считаются параллельно, а общий JSON
-    # переписывается целиком и потерял бы чужие ключи.
+    # A file per process: the scenarios are computed in parallel, and a shared
+    # JSON is rewritten whole and would lose the other keys.
     ap.add_argument("--out", default=OUT)
     args = ap.parse_args()
 

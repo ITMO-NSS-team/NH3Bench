@@ -1,14 +1,15 @@
 """
-Конечное пространство действий агента.
+The agent's finite action space.
 
-Установка намеренно оцифрована не полностью: часть величин существует только на
-местных приборах и доступна лишь через наряд человеку. Это не декорация -- в
-трёх сценариях из пяти показание SCADA расходится с фактом, и без ручного
-замера расхождение обнаружить невозможно.
+The plant is deliberately not fully digitalized: some quantities exist
+only on local instruments and are reachable only by dispatching a
+person. This is not decoration -- in three scenarios out of five the
+SCADA reading disagrees with the fact, and without a manual measurement
+the gap cannot be found at all.
 
-Каждое действие имеет задержку исполнения в виртуальных секундах. Время не
-останавливается ни пока агент думает, ни пока действие исполняется, ни пока
-работник идёт к аппарату.
+Every action has an execution latency in virtual seconds. Time does not
+stop while the agent thinks, nor while the action executes, nor while a
+worker walks to the equipment.
 """
 
 from __future__ import annotations
@@ -22,7 +23,7 @@ from .control import reset_trips
 
 
 # =========================================================================
-# Топология перемещений персонала
+# Personnel movement topology
 # =========================================================================
 
 ZONES = ("CONTROL_ROOM", "MACHINE_ROOM", "HALL", "LT_STORE", "BLAST",
@@ -63,7 +64,7 @@ WORK_TIME = {
 
 
 # =========================================================================
-# Ручной замер: возвращает ФАКТИЧЕСКОЕ значение в обход датчиков
+# Manual measurement: returns the ACTUAL value, bypassing the sensors
 # =========================================================================
 
 def measure(p: Plant, item: str, target: str):
@@ -141,7 +142,7 @@ def measure(p: Plant, item: str, target: str):
 
 
 # =========================================================================
-# Наряд и персонал
+# Dispatch and personnel
 # =========================================================================
 
 @dataclass
@@ -159,9 +160,12 @@ class Task:
 
 
 class Workforce:
-    """Персонал смены: перемещения, исполнение нарядов, отказ от риска."""
+    """
+    The shift's personnel: movement, dispatch execution, refusal to take a
+    risk.
+    """
 
-    REFUSE_PPM = 100.0     # выше этого работник без СИЗ в зону не войдёт
+    REFUSE_PPM = 100.0     # above this a worker will not enter the zone without SCBA
 
     def __init__(self, plant: Plant):
         self.p = plant
@@ -273,7 +277,7 @@ class Workforce:
 
 
 # =========================================================================
-# Действие и контекст
+# Action and context
 # =========================================================================
 
 @dataclass
@@ -310,7 +314,7 @@ def _dispatch(c: Ctx, zone: str, item: str, target: str = "") -> str:
 
 
 # =========================================================================
-# Реализация действий
+# Action implementation
 # =========================================================================
 
 def _evacuate(c: Ctx, zone) -> str:
@@ -323,14 +327,15 @@ def _evacuate(c: Ctx, zone) -> str:
             moved.append(op_id)
     if zone is None:
         p.evacuated = True
-    # Эвакуация цеха в разгар приёмки останавливает пастеризацию с молоком
-    # в аппарате: партия уходит в брак. Безопасность людей это не отменяет --
-    # но цена решения входит в оценку.
+    # Evacuating the hall in the middle of milk reception stops pasteurization
+    # with milk in the unit: the batch is scrapped. That does not undo the
+    # safety of people -- but the price of the decision enters the score.
     if zone in (None, "HALL") and p._milk_profile(p.t) > 0.3:
         p.maj_flags.add("MAJ-3")
-        # В брак уходит то, что успело бы пройти приёмку за час, пока цех
-        # пуст и пастеризатор стоит: величина считается по тому же профилю
-        # приёмки, которым живёт модель, а не назначается.
+        # What is scrapped is what would have passed reception during the hour
+        # while the hall is empty and the pasteurizer is stopped: the quantity
+        # is computed from the same reception profile the model lives by, not
+        # assigned by hand.
         p.scrapped_kg += (p.cfg.milk_flow_peak * p._milk_profile(p.t)
                           * 3600.0)
         p.log("Приёмка молока прервана эвакуацией: партия в пастеризаторе "
@@ -480,11 +485,11 @@ def _ack_top(c: Ctx) -> str:
 
 
 # =========================================================================
-# Каталог
+# Catalog
 # =========================================================================
 
 def build_catalog() -> list:
-    """Полный каталог действий. Состав одинаков во всех сценариях."""
+    """The full action catalog. Its content is identical in every scenario."""
     A = []
 
     def add(aid, text, latency, category, fn):
@@ -493,7 +498,7 @@ def build_catalog() -> list:
     add("NO_OP", "Ничего не предпринимать, продолжить наблюдение",
         5.0, "observe", lambda c: "наблюдение продолжено")
 
-    # --- наряды на замеры ---
+    # --- dispatches for measurements ---
     for tgt in ("VE-LP", "VE-IP", "VE-HP"):
         add(f"MEASURE:LEVEL_GLASS:{tgt}",
             f"Наряд: снять показание указателя уровня {tgt}", 8.0, "dispatch",
@@ -528,7 +533,7 @@ def build_catalog() -> list:
             (lambda t: lambda c: _dispatch(c, "MACHINE_ROOM",
                                            "OIL_LEVEL", t))(co))
 
-    # --- наряды на ручные операции ---
+    # --- dispatches for manual operations ---
     for ev in EVAP_ZONE:
         add(f"MANUAL:CLOSE_FEED:{ev}",
             f"Наряд: закрыть вручную клапан подачи жидкости на {ev}",
@@ -565,7 +570,7 @@ def build_catalog() -> list:
             8.0, "dispatch",
             (lambda t: lambda c: _dispatch(c, t, "RECALIBRATE", t))(z))
 
-    # --- персонал ---
+    # --- personnel ---
     add("PPE:SCBA", "Приказать работнику надеть изолирующий дыхательный аппарат",
         8.0, "safety", lambda c: _dispatch(c, "CONTROL_ROOM", "DON_PPE"))
     add("EVACUATE:MACHINE_ROOM", "Вывести персонал из машинного зала",
@@ -575,7 +580,7 @@ def build_catalog() -> list:
     add("EVACUATE:ALL", "Общая эвакуация на сборный пункт",
         15.0, "safety", lambda c: _evacuate(c, None))
 
-    # --- режим ---
+    # --- regime ---
     for stage, ru in (("LP", "НД"), ("IP", "СД")):
         add(f"SETPOINT:{stage}:UP",
             f"Поднять уставку давления всасывания {ru} на 0.15 бар",
@@ -633,7 +638,7 @@ def build_catalog() -> list:
         add(f"COND:PUMP_ON:{cd}", f"Включить насос орошения конденсатора {cd}",
             12.0, "control", (lambda t: lambda c: _cond_pump(c, t))(cd))
 
-    # --- аварийные системы ---
+    # --- safety systems ---
     add("SAFETY:ESD", "Выполнить аварийный останов установки",
         20.0, "safety", lambda c: _esd(c))
     add("SAFETY:VENT:MACHINE_ROOM", "Включить аварийную вентиляцию машзала",
@@ -645,7 +650,7 @@ def build_catalog() -> list:
     add("SAFETY:NOTIFY", "Оповестить аварийные службы и руководство",
         20.0, "safety", lambda c: _notify(c))
 
-    # --- тревоги ---
+    # --- alarms ---
     add("ALARM:ACK_ALL", "Квитировать все активные тревоги",
         8.0, "alarm", lambda c: _ack_all(c))
     add("ALARM:ACK_TOP", "Квитировать тревогу наивысшего приоритета",

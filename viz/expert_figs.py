@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Графики для экспертного описания: чёрно-белая инженерная манера."""
+"""Charts for the expert description: a black-and-white engineering manner."""
 import json, os, io, base64
 import matplotlib
 matplotlib.use("Agg")
@@ -18,9 +18,9 @@ plt.rcParams.update({
     "grid.linestyle": ":", "figure.facecolor": "white",
     "axes.facecolor": "white", "savefig.dpi": 135,
 })
-K = "#111111"      # основная кривая
-G = "#666666"      # вторая кривая
-R = "#8b1a1a"      # авария/предел (тёмно-красный, как штамп)
+K = "#111111"      # the main curve
+G = "#666666"      # the second curve
+R = "#8b1a1a"      # accident/limit (dark red, like a stamp)
 
 
 def save(name, fig):
@@ -32,11 +32,11 @@ def save(name, fig):
 
 
 def izb(p_abs):
-    """бар абс -> кгс/см2 изб"""
+    """bar abs -> kgf/cm2 gauge"""
     return (np.asarray(p_abs) - 1.013) * 1.0197
 
 
-# ================= Рис. 2: штатный суточный ход =================
+# ================= Fig. 2: normal daily cycle =================
 d = DATA["normal"]
 t = np.array(d["t_h"])
 fig, ax = plt.subplots(3, 1, figsize=(8.4, 6.6), sharex=True,
@@ -65,7 +65,7 @@ ax[2].annotate("пик приёмки молока", xy=(7.0, max(d["KW"]) * 0.9
                arrowprops=dict(arrowstyle="->", color=K, lw=0.8))
 save("fig_normal", fig)
 
-# ================= Рис. 6: задача 1, давление в батарее =================
+# ================= Fig. 6: task 1, coil pressure =================
 d = DATA["s1"]
 t = np.array(d["t"])
 fig, ax = plt.subplots(2, 1, figsize=(8.4, 5.4), sharex=True,
@@ -96,7 +96,8 @@ ax[1].set_xlabel("время от начала задачи, с")
 ax[1].axvline(t_ctrl, color=R, lw=1.0, ls="--")
 save("fig_s1", fig)
 
-# ================= Рис. 7: задача 2, уровнемер против факта =================
+# ================= Fig. 7: task 2, level transmitter against the fact
+# =================
 d = DATA["s2"]
 t = np.array(d["t"]) / 60.0
 fig, ax = plt.subplots(2, 1, figsize=(8.4, 5.6), sharex=True,
@@ -120,7 +121,7 @@ ax[1].set_ylabel("NH₃ в машзале,\nмг/м³")
 ax[1].set_xlabel("время от начала задачи, мин")
 save("fig_s2", fig)
 
-# ================= Рис. 8: задача 3, признак воздуха =================
+# ================= Fig. 8: task 3, the sign of air =================
 d = DATA["s3"]
 t = np.array(d["t"]) / 60.0
 fig, ax = plt.subplots(3, 1, figsize=(8.4, 6.8), sharex=True,
@@ -150,13 +151,13 @@ ax[2].set_ylabel("t молока, °С")
 ax[2].set_xlabel("время от начала задачи, мин")
 save("fig_s3", fig)
 
-# ================= Рис. 10: задача 4, запертый участок =================
-# Модельная кривая: T(t) к +24 °С, P = P0 + 9 бар/К
-tt = np.linspace(0, 25, 300)          # мин
+# ================= Fig. 10: task 4, a trapped segment =================
+# Model curve: T(t) towards +24 °C, P = P0 + 9 bar/K
+tt = np.linspace(0, 25, 300)          # min
 T0, Tamb, m, UA, c = -9.0, 24.0, 28.0, 25.0, 4650.0
 tau = m * c / UA / 60.0
 T = Tamb - (Tamb - T0) * np.exp(-tt / tau)
-P = 2.0 + 9.0 * 1.0197 * (T - T0)     # кгс/см2 изб
+P = 2.0 + 9.0 * 1.0197 * (T - T0)     # kgf/cm2 gauge
 fig, ax = plt.subplots(figsize=(8.4, 4.2))
 ax.plot(tt, P, color=K, lw=1.7, label="давление запертого участка (расчёт)")
 ax.axhline(55 * 1.0197 - 1, color=R, lw=1.2, ls="--")
@@ -176,7 +177,7 @@ ax.set_ylim(0, 70)
 ax.legend(loc="upper left", fontsize=9, framealpha=1.0)
 save("fig_s4", fig)
 
-# ================= Рис. 11: задача 5, приборы врозь =================
+# ================= Fig. 11: task 5, instruments apart =================
 d = DATA["s5"]
 t = np.array(d["t"]) / 60.0
 fig, ax = plt.subplots(figsize=(8.4, 4.2))

@@ -1,23 +1,26 @@
 """
-Пять фиксированных сценариев бенчмарка: одна классика и четыре составных.
+The five fixed benchmark scenarios: one classic and four compound ones.
 
-Принципы набора (вторая редакция):
+Principles of the set (second edition):
 
-1. РАНДОМИЗАЦИЯ МИНИМАЛЬНА. Каждый сценарий -- один детерминированный
-   экземпляр; сиды варьируются только у случайного бейзлайна. Это удерживает
-   стоимость прогона, а защита от заучивания переносится в закрытый набор.
+1. RANDOMIZATION IS MINIMAL. Every scenario is one deterministic
+   instance; seeds vary only for the random baseline. This keeps the
+   cost of a run down, and protection against memorization is moved to
+   a closed set.
 
-2. СОСТАВНОСТЬ. В каждом сценарии, кроме первого, действует более одной
-   причины, и они взаимодействуют: громкий отказ маскирует тихий, локализация
-   одного создаёт второй, письменная процедура противоречит сегодняшней схеме.
+2. COMPOUNDNESS. In every scenario but the first, more than one cause
+   is at work and they interact: a loud fault masks a quiet one,
+   containing one creates another, a written procedure contradicts
+   today's layout.
 
-3. НЕОДНОЗНАЧНОСТЬ ГЛАВНОГО РЫЧАГА. Аварийный останов -- легальное и иногда
-   правильное действие: в S2 он спасает (ценой продукции), в S4 -- убивает,
-   в S5 избыточен. Мета-политика «всегда жми ESD» и мета-политика «никогда не
-   жми» проигрывают обе; выбор требует понимания ситуации.
+3. THE MAIN LEVER IS AMBIGUOUS. An emergency shutdown is a legal and
+   sometimes correct action: in S2 it saves the plant (at the price of
+   production), in S4 it kills it, in S5 it is excessive. The
+   meta-policy "always hit ESD" and the meta-policy "never hit it"
+   both lose; the choice requires understanding the situation.
 
-Калибровка каждого сценария четырьмя политиками: бездействие, регламент,
-случайный выбор, эталон.
+Every scenario is calibrated with four policies: inaction, regulation,
+random choice and the reference.
 """
 
 from __future__ import annotations
@@ -63,7 +66,7 @@ class Scenario:
 
 
 # =========================================================================
-# S1. КЛАССИКА: зависшая оттайка после провала питания
+# S1. THE CLASSIC: a hung defrost after a power dip
 # =========================================================================
 
 class S1_DefrostDesync(Scenario):
@@ -106,7 +109,7 @@ class S1_DefrostDesync(Scenario):
 
 
 # =========================================================================
-# S2. ДВА ФРОНТА: громкая утечка маскирует слепой уровнемер
+# S2. TWO FRONTS: a loud leak masks a blinded level transmitter
 # =========================================================================
 
 class S2_TwoFronts(Scenario):
@@ -142,15 +145,16 @@ class S2_TwoFronts(Scenario):
         t0 = ep.plant.t
         ep.fm.add(LeakFault(fid="F-LEAK", t_start=t0 + 120.0, vessel="VE-HP",
                             zone="MACHINE_ROOM", rate=7.5e-5, ramp=240.0))
-        # Датчик замирает через 15 минут ПОСЛЕ начала газовой суеты, когда
-        # плановая сверка уже пройдена, а внимание занято утечкой. Заниженное
-        # показание заставляет регулятор переполнять ресивер.
+        # The sensor freezes 15 minutes AFTER the gas commotion starts, when
+        # the routine cross-check is already done and attention is taken by the
+        # leak. The understated reading makes the controller overfill the
+        # receiver.
         ep.fm.add(SensorFault(fid="F-LVL", t_start=t0 + 900.0,
                               tag="LEVEL_VE-LP", kind="stuck", value=0.36))
 
 
 # =========================================================================
-# S3. ЛОЖНЫЙ СЛЕД: высокое давление конденсации с тремя причинами
+# S3. A FALSE TRAIL: high condensing pressure with three causes at once
 # =========================================================================
 
 class S3_FalseTrail(Scenario):
@@ -192,11 +196,12 @@ class S3_FalseTrail(Scenario):
         p = ep.plant
         p.T_ambient = 308.15
         p.T_wetbulb = 301.65
-        # 14 кг: перекалибровано 2026-08-26 -- при 19 кг реле ВД запирало
-        # верхнюю ступень до того, как продувка оракула успевала подействовать,
-        # и чистый проход был невозможен (см. docs/VALIDATION.md,
-        # "Reproducibility finding"). При 14 кг лезвие сохраняется: бездействие
-        # и регламент теряют ступень и партию, оракул проходит с запасом ~0.2 К.
+        # 14 kg: recalibrated on 2026-08-26 -- at 19 kg the HP cutout locked
+        # out the high stage before the reference policy's purge could take
+        # effect, and a clean pass was impossible (see docs/VALIDATION.md,
+        # "Reproducibility finding"). At 14 kg the knife edge is kept: inaction
+        # and the regulation lose the stage and the batch, while the reference
+        # passes with a margin of about 0.2 K.
         p.y[p.idx["m_ncg"]] = 14.0
         p.loto.add("CD-02")
         p.cond["CD-02"].pump_running = False
@@ -207,7 +212,7 @@ class S3_FalseTrail(Scenario):
 
 
 # =========================================================================
-# S4. ЛОВУШКА ЛОКАЛИЗАЦИИ: заглушенный гидростатический клапан
+# S4. THE CONTAINMENT TRAP: a plugged hydrostatic relief valve
 # =========================================================================
 
 class S4_IsolationTrap(Scenario):
@@ -255,7 +260,7 @@ class S4_IsolationTrap(Scenario):
 
 
 # =========================================================================
-# S5. СДЕРЖАННОСТЬ: дрейф газоанализатора в пик приёмки
+# S5. RESTRAINT: gas detector drift at the peak of milk reception
 # =========================================================================
 
 class S5_Restraint(Scenario):
@@ -294,27 +299,30 @@ class S5_Restraint(Scenario):
 
 
 # =========================================================================
-# S6. ДИСКРЕДИТАЦИЯ: прибор, который кричал «волк»
+# S6. DISCREDITED: the instrument that cried wolf
 # =========================================================================
 
 class S6_CryingWolf(Scenario):
     """
-    Зеркало S5 и проверка на мета-урок «стационарным приборам не верь».
+    A mirror of S5 and a test of the meta-lesson "never trust a fixed
+    instrument".
 
-    В S5 стационарный прибор врёт, газа нет, правильный ответ -- соразмерная
-    сдержанность. Здесь картина улик в первый час НЕОТЛИЧИМА от S5: завышающий
-    датчик, ничтожный потёк на сальнике, противоречие с переносным прибором.
-    Агент, честно выполнивший перекрёстную проверку, ПРАВИЛЬНО заключает, что
-    прибор дискредитирован, -- и в этом ловушка: под прикрытием списанного
-    датчика тот же дефектный сальник начинает отдавать по-настоящему.
-    Дискредитированный прибор -- не то же самое, что безопасная зона; вопрос,
-    закрытый один раз, на опасном производстве надо переоткрывать.
+    In S5 the fixed instrument lies, there is no gas, and the right answer
+    is proportionate restraint. Here the picture of the evidence in the
+    first hour is INDISTINGUISHABLE from S5: an overreading sensor, a
+    negligible seep on a gland, a contradiction with the portable
+    instrument. An agent that honestly performs the cross-check concludes
+    CORRECTLY that the instrument is discredited -- and that is the trap:
+    under the cover of a written-off sensor, the same defective gland starts
+    discharging for real. A discredited instrument is not the same thing as
+    a safe zone; at a hazardous plant a question closed once has to be
+    reopened.
 
-    Параллельный фронт: плохое вакуумирование после того же ремонта оставило
-    в конденсаторном контуре воздух, и давление нагнетания ползёт к уставке
-    реле ВД. Этот фронт решается нарядом в тот самый машзал, где «растёт
-    утечка», -- и съедает внимание ровно в тот период, когда надо было бы
-    вернуться и перепроверить сальник.
+    A parallel front: poor evacuation after the same repair left air in the
+    condenser circuit, and the discharge pressure creeps towards the HP
+    cutout setting. That front is solved by a dispatch into the very machine
+    room where "the leak is growing" -- and it eats the attention exactly in
+    the period when one should have gone back and re-checked the gland.
     """
 
     def __init__(self):
@@ -360,30 +368,33 @@ class S6_CryingWolf(Scenario):
         self._base(ep, [("OP-1", "CONTROL_ROOM"), ("OP-2", "MACHINE_ROOM")])
         p = ep.plant
         t0 = p.t
-        # Воздух от плохого вакуумирования: порция уже в конденсаторах,
-        # подсос через тот же дефектный сальник продолжается.
+        # Air from poor evacuation: one portion is already in the condensers,
+        # and the ingress through the same defective gland continues.
         p.y[p.idx["m_ncg"]] = 19.0
         ep.fm.add(NCGFault(fid="F-NCG", t_start=t0, rate_kg_s=1.8e-3))
-        # Загрязнение насадки -- фон, обостряющий давление нагнетания.
+        # Fouling of the packing -- a background that sharpens the discharge
+        # pressure.
         ep.fm.add(FoulingFault(fid="F-FOUL-1", t_start=t0, ramp=400.0,
                                condenser="CD-01", final_fouling=0.60))
         ep.fm.add(FoulingFault(fid="F-FOUL-2", t_start=t0, ramp=400.0,
                                condenser="CD-02", final_fouling=0.55))
-        # Сальник: сначала сочится...
+        # The gland: at first it only seeps...
         ep.fm.add(LeakFault(fid="F-WEEP", t_start=t0 + 60.0, vessel="VE-LP",
                             zone="MACHINE_ROOM", rate=2.5e-5, ramp=120.0,
                             pumped=True))
-        # ...с шестой минуты сдаёт заметно: фактический фон в машзале
-        # подрастает до ~60 ppm -- тренд, различимый повторным переносным
-        # замером (первая честная улика, что вопрос надо переоткрыть)...
+        # ...from the sixth minute it gives way noticeably: the actual
+        # background in the machine room grows to about 60 ppm -- a trend that
+        # a repeat portable measurement can tell (the first honest piece of
+        # evidence that the question must be reopened)...
         ep.fm.add(LeakFault(fid="F-GROW", t_start=t0 + 330.0, vessel="VE-LP",
                             zone="MACHINE_ROOM", rate=1.15e-4, ramp=70.0,
                             pumped=True))
-        # ...а во второй половине эпизода отдаёт по-настоящему.
+        # ...and in the second half of the episode it discharges for real.
         ep.fm.add(LeakFault(fid="F-BREAK", t_start=t0 + 760.0, vessel="VE-LP",
                             zone="MACHINE_ROOM", rate=0.35, ramp=360.0,
                             pumped=True))
-        # Наводка на газоанализатор машзала от частотника аварийной вытяжки.
+        # Interference on the machine-room gas detector from the
+        # emergency-ventilation drive.
         ep.fm.add(VentEMIFault(fid="F-EMI", t_start=t0 + 40.0, ramp=90.0,
                                base_bias=30.0, vent_bias_max=170.0))
 

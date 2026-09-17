@@ -1,13 +1,15 @@
 """
-Восстановление размера запросов, которые уходили модели.
+Recovering the size of the requests that went to the model.
 
-В протоколах сохранены только выходные токены: входные при первом прогоне не
-записывались. Но двойник детерминирован, а промпт собирается функцией от
-наблюдения — значит, воспроизведя эпизод по записанному протоколу, можно
-получить ровно те тексты, что уходили модели, и измерить их.
+The transcripts hold only the output tokens: the input ones were not
+recorded on the first run. But the twin is deterministic and the prompt
+is a function of the observation -- so replaying an episode from its
+recorded transcript gives exactly the texts that went to the model, and
+they can be measured.
 
-Скрипт печатает по каждому эпизоду число вызовов, длину системной части
-(она одна на весь прогон) и суммарную длину пользовательских частей.
+The script prints, for every episode, the number of calls, the length
+of the system part (one per run) and the total length of the user
+parts.
 
     python3 tests/measure_prompts.py
 """
@@ -29,7 +31,7 @@ TRACE_DIR = os.path.join(ROOT, "results", "llm_traces")
 
 
 class CapturingReplay(ReplayPolicy):
-    """Воспроизведение с сохранением собранных промптов."""
+    """A replay that keeps the assembled prompts."""
 
     def __init__(self, path, history=14):
         super().__init__(path)
@@ -69,7 +71,7 @@ def main():
         print(f"{sid}: вызовов {len(chars)}, пользовательская часть "
               f"{sum(chars)} символов (средняя {out['episodes'][sid]['user_chars_mean']}, "
               f"максимум {out['episodes'][sid]['user_chars_max']})")
-        # Образец для измерения токенов настоящим токенизатором
+        # A sample for measuring tokens with a real tokenizer
         if sid == "S3" and pol.prompts:
             with open(os.path.join(ROOT, "results", "_prompt",
                                    "sample_user.txt"), "w",

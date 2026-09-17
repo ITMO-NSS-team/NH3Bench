@@ -1,22 +1,23 @@
 """
-Таблица результатов бенчмарка по разделу 11 проектного документа.
+The benchmark results table; the metric set is described in docs/METRICS.md.
 
     python3 tests/report_metrics.py
 
-Читает results/baselines.jsonl (эталонные политики), results/llm.jsonl
-(агентные прогоны) и results/ponr.json (точки невозврата, если посчитаны).
+It reads results/baselines.jsonl (reference policies), results/llm.jsonl
+(agent runs) and results/ponr.json (points of no return, if computed).
 
-Печатает:
-  1. матрицу исходов;
-  2. основную таблицу -- лексикографическую, по CPR -> вред -> цена -> энергия;
-  3. экономику и время раздельно;
-  4. Regulation Gap (единственное место, где применяется скалярная свёртка);
-  5. худший случай отдельно от среднего;
-  6. расшифровку сокращений: что означает каждая политика и каждый сценарий.
+It prints:
+  1. the outcome matrix;
+  2. the main table -- lexicographic, by CPR -> harm -> cost -> energy;
+  3. economics and time separately;
+  4. the Regulation Gap (the only place where the scalar collapse is
+     used);
+  5. the worst case separately from the mean;
+  6. a legend: what every policy and every scenario means.
 
-Обоснованность аварийного останова определяется не мнением, а прогоном π_esd:
-останов считается обоснованным в том сценарии, где бездействие даёт
-катастрофу, а немедленный останов -- нет.
+Whether an emergency shutdown was justified is decided not by opinion
+but by the pi_esd run: a shutdown counts as justified in a scenario
+where inaction gives a catastrophe and an immediate shutdown does not.
 """
 
 import argparse
@@ -33,8 +34,9 @@ from nh3twin import metrics as M
 from nh3twin.scenarios import SCENARIOS
 
 
-# Человеческие имена эталонных политик. Набор фиксирован (nh3twin/policies.py);
-# агентные строки вида "llm:<модель>" распознаются по префиксу.
+# Human-readable names of the reference policies. The set is fixed
+# (nh3twin/policies.py); agent rows of the form "llm:<model>" are recognized by
+# the prefix.
 POLICY_LEGEND = {
     "null": ("π_null, бездействие",
              "не предпринимать ничего. Показывает, что сценарий вообще "
@@ -59,7 +61,7 @@ POLICY_LEGEND = {
 
 
 def policy_legend(label):
-    """(имя, пояснение) для строки таблицы."""
+    """(name, explanation) for a table row."""
     if label in POLICY_LEGEND:
         return POLICY_LEGEND[label]
     if label.startswith("llm:"):
@@ -100,9 +102,9 @@ def load_ponr(patterns):
 
 def _energy(a) -> str:
     """
-    Энергоёмкость со знаменателем: она считается только по прогонам,
-    дожившим до конца горизонта, и без указания их числа сравнивать
-    политики нельзя.
+    Energy intensity with a denominator: it is computed only over runs that
+    survived to the end of the horizon, and without stating how many there
+    were, policies cannot be compared.
     """
     if a.get("energy_kwh_per_t") is None:
         return "— (0)"
@@ -127,8 +129,9 @@ def outcome(r) -> str:
 
 def esd_justification(rows_by):
     """
-    Обоснованность останова по сценариям, выведенная из прогонов, а не
-    назначенная. Требуются обе опорные политики: бездействие и π_esd.
+    Whether a shutdown was justified, per scenario, derived from runs rather
+    than assigned. Both reference policies are required: inaction and
+    pi_esd.
     """
     just, why = {}, {}
     for sid in {k[0] for k in rows_by}:
@@ -150,20 +153,24 @@ def esd_justification(rows_by):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--base", nargs="*",
+                    # Явные пути, а не маска: base_S*.jsonl захватывает и
+                    # архив прежней версии физики, который в склейке победил
+                    # бы текущий прогон.
                     default=[os.path.join(ROOT, "results", "baselines.jsonl"),
-                             os.path.join(ROOT, "results", "base_S*.jsonl")])
+                             os.path.join(ROOT, "results", "base_S6.jsonl")])
     ap.add_argument("--llm", nargs="*",
                     default=[os.path.join(ROOT, "results", "llm.jsonl")])
     ap.add_argument("--ponr", nargs="*",
                     default=[os.path.join(ROOT, "results", "ponr.json"),
                              os.path.join(ROOT, "results", "ponr_S*.json")])
     ap.add_argument("--opponent", default="regulation")
-    # Клетки, которые НЕ измерялись, а приняты по допущению. Формат:
-    # "llm:claude-fable-5:S1=100,S2=100". Такие клетки печатаются со
-    # звёздочкой и перечисляются сноской: таблица, где допущение неотличимо
-    # от измерения, вводит в заблуждение тем вернее, чем она аккуратнее.
-    # Допущение применяется ТОЛЬКО к скаляру раздела 5. Физические метрики
-    # (PR, CPR, вред, цена) остаются пустыми -- их нельзя выдумать.
+    # Cells that were NOT measured but assumed. Format:
+    # "llm:claude-fable-5:S1=100,S2=100". Such cells are printed with an
+    # asterisk and listed in a footnote: a table where an assumption is
+    # indistinguishable from a measurement misleads all the more surely the
+    # tidier it looks. The assumption applies ONLY to the scalar of section 5.
+    # The physical metrics (PR, CPR, harm, cost) stay empty -- they cannot be
+    # invented.
     ap.add_argument("--assume", default="")
     ap.add_argument("--json", default="")
     args = ap.parse_args()
@@ -193,8 +200,8 @@ def main():
     pols = base_pols + agents
 
     W = 22
-    # Линейка тянется под фактическую ширину матрицы: столбцов столько,
-    # сколько политик, и при добавлении модели таблица становится шире.
+    # The rule is stretched to the actual width of the matrix: there are as
+    # many columns as policies, and adding a model makes the table wider.
     rule = "=" * max(118, 5 + W * len(pols))
     print(rule)
     print("1. МАТРИЦА ИСХОДОВ (сид 1)")
@@ -223,7 +230,7 @@ def main():
             print(f"  {sid:<7}{d['horizon_s']:>9.0f}с{f(d['ponr_cat_s']):>14}"
                   f"{f(d['ponr_clean_s']):>16}")
 
-    # ---------------- агрегаты ----------------
+    # ---------------- aggregates ----------------
     aggs = []
     for p in pols:
         rows = [r for r in allr if r["policy"] == p]
@@ -354,9 +361,9 @@ def main():
           f"({M.COST_REF_RUB / 1e6:.2f} млн ₽ = разрыв + сутки простоя); "
           f"необоснованный ESD ×{M.ESD_UNJUST_MULT}, барьер ×{M.BAR_MULT}.")
     print("Токенов в формуле нет: размышление уже оплачено виртуальным "
-          "временем. S(B) по бюджетам — фронтир §11.6.")
+          "временем. S(B) по бюджетам — фронтир безопасность-латентность.")
 
-    # ---------------- расшифровка ----------------
+    # ---------------- legend ----------------
     print()
     print("=" * 118)
     print("6. ОБОЗНАЧЕНИЯ")

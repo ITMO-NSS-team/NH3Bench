@@ -38,9 +38,9 @@ numbers to a human or an agent (including the trainer's history chart) goes thro
 observation layer.
 
 **The wave-speed bulk modulus must be adiabatic, and it travels with the derate.**
-Validation against CoolProp (2026-08-26) showed the original K = 1.03 ГПа was the
+Validation against CoolProp (2026-08-26) showed the original K = 1.03 GPa was the
 *isothermal* bulk modulus of liquid NH₃ (K_T at −10 °C); a compression wave is adiabatic,
-K_s = ρa² = 1.6…2.2 ГПа, so ρ·a — and the Joukowsky spike — was low by ×1.16…1.37.
+K_s = ρa² = 1.6…2.2 GPa, so ρ·a — and the Joukowsky spike — was low by ×1.16…1.37.
 Fixed by tabulating the saturated-liquid sound speed (`props.a_l`, `props.K_liq`) and
 passing K explicitly through `piping.wave_speed` (no default, so the isothermal constant
 cannot silently return). Because the strength derate 0.45 had been calibrated *against
@@ -85,6 +85,18 @@ frost, inversions of classic signatures where the failed instrument is the coil 
 
 ---
 
+### The set that was planned
+
+The original design specified 18 published scenarios in six groups — over-reaction control,
+slow degradation with product risk, sensor deception, fast dangerous transients (the core),
+emergency response, and pressure/adversarial — plus 6 unpublished parametric variants as
+contamination control, at 5–10 seeds each: about 140 runs per configuration. The principle
+behind that arithmetic was that **scenarios are expensive (6–10 hours of an expert each) and
+seeds are cheap (only tokens)**, so statistical power should come from seeds rather than
+from variety. What exists is six scenarios at one seed: the compound ones proved to carry
+the discrimination, and the cost of a frontier sweep turned out to be dominated by model
+calls rather than by scenario count. The closed set remains the answer to memorization.
+
 ## 3. Deliberate constraints
 
 **No physics in JavaScript.** The expert trainer runs the real Python twin under Pyodide.
@@ -96,23 +108,43 @@ readings*, so in S5 the hall visibly "smokes" from a lying instrument — the sa
 agent faces, preserved visually.
 
 **Manual measurement returns ground truth.** This is the entire justification of the
-workforce layer. Three of five scenarios turn on SCADA disagreeing with reality.
+workforce layer. Three of six scenarios turn on SCADA disagreeing with reality.
 
 **The action catalog is scenario-independent.** Otherwise the legal-action list leaks the
 answer, and the random baseline stops being a fair lower bound.
 
 ---
 
-## 4. Known soft spots
+## 4. Known simplifications of the twin
 
-- **Dynamic burst coefficient 0.45 × static.** Calibration constant fitted to known
-  ruptures. Flagged for expert acceptance in the review sheet; it materially sets when
-  pipes fail.
-- **Well-mixed zone dispersion.** No floor-level pooling, no cold dense cloud outdoors.
-  Understates near-source concentration for large releases; declared in the expert document.
+Listed deliberately, so that results are not read more widely than they support.
+
+1. **No dense-cloud dispersion.** Off-site dispersion uses the Briggs Gaussian plume
+   model, valid for dilute admixtures. Above a mass fraction of about 0.1 % an ammonia
+   aerosol becomes negatively buoyant and the model underestimates the ground-level
+   concentration near the source; the `plume_model_valid` flag is set. It does not affect
+   how the policies separate, because the CAT criteria were calibrated on this same model.
+2. **Well-mixed rooms.** Floor-level pooling and stratification are not reproduced.
+3. **Superheated vapour is linear in cp** from the saturation state; density carries the
+   power correction rho_v·(Tsat/T)^n(P) with n tabulated from CoolProp. Measured
+   (`tests/validate_props.py`): h and s below 1.6 % over the whole range up to 80 K,
+   density below 2.6 % (9.4 % in the hot-gas corner before the correction), isentropic
+   compression Δh below 0.4 %.
+4. **Lumped pipe hydraulics.** Distributed pressure losses and method-of-characteristics
+   wave propagation are not computed; a shock is evaluated algebraically by Joukowsky.
+5. **The impact strength derating factor (0.55) is a calibration parameter**, not a
+   measured quantity. It materially sets when pipes fail and is flagged for expert
+   acceptance in the review sheet.
+6. **Oil is accounted for energetically only.** Ammonia solubility in oil, foaming and oil
+   return from the evaporators are not modelled.
+7. **One atmospheric stability class** (D) and constant wind within a run.
+
+## 5. Known soft spots of the benchmark
+
 - **S1 recall risk.** Millard is the most-cited ammonia incident in existence; the model may
   remember rather than reason. Mitigated only by the silent-command-failure twist.
 - **Single-instance scenarios are, in principle, solvable by a lookup table.** For a fixed
   seed no policy claim like "rules can never solve this" is theoretically sound —
   difficulty lives in the distribution. Acknowledged; the closed set is the answer.
-- **Pyodide path never executed in a browser** from the dev environment.
+- **One draw per model.** Scenario determinism does not remove model sampling; only one
+  model has been measured repeatedly (`docs/MODEL-RUNS.md`, sensitivity studies).

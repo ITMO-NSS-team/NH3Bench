@@ -1,15 +1,15 @@
 """
-Пересчёт агентных прогонов по сохранённым протоколам.
+Re-deriving agent runs from the saved transcripts.
 
-Модель вызывать повторно нельзя: она недетерминирована, и второй прогон был
-бы другим эпизодом. Но последовательность действий и стоимость размышления
-записаны пошагово, а двойник детерминирован -- значит эпизод можно
-воспроизвести точно и снять с него метрики, которых при первом прогоне не
-собирали.
+The model cannot be called again: it is not deterministic, and a second
+run would be a different episode. But the sequence of actions and the
+cost of deliberation are recorded step by step, and the twin is
+deterministic -- so the episode can be reproduced exactly and metrics
+that were not collected on the first run can be taken from it.
 
-Совпадение с записанным исходом проверяется и печатается. Расхождение
-означает, что двойник изменился между прогонами, и тогда сравнивать новые
-метрики со старой матрицей нельзя.
+The match with the recorded outcome is checked and printed. A
+divergence means the twin changed between runs, and new metrics then
+cannot be compared with the old matrix.
 
     python3 tests/replay_llm.py
 """
@@ -68,7 +68,7 @@ def main():
 
         prev = old.get((sid, pol, seed))
         if prev:
-            # переносим то, что известно только о самом вызове модели
+            # we carry over what is known only about the model call itself
             for k in ("llm",):
                 if k in prev:
                     r[k] = prev[k]

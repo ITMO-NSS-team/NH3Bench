@@ -17,6 +17,8 @@ Three things make it different from scripted operations benchmarks:
   operator's ears, reachable only by dispatching a human who walks, works, and refuses
   unsafe entry. In most scenarios SCADA disagrees with reality at least once.
 
+![How NH3Bench is put together: the plant, the agent loop, the token clock and the metric set](docs/media/main_preview.png)
+
 ## Results — seed 1, six scenarios, nine language models
 
 Unified score 0–100 (catastrophe = 0; people, economics and discipline multiply — see
@@ -40,7 +42,7 @@ Unified score 0–100 (catastrophe = 0; people, economics and discipline multipl
 
 \* Twin v2.1 (adiabatic wave-speed modulus, corrected superheat density,
 sensor faults reaching the panel — `docs/VALIDATION.md`). S2 was re-measured
-live on all four models after the sensor fix; the S3 cells are deterministic
+live on all four Claude models after the sensor fix; the S3 cells are deterministic
 replays of the recorded traces under the retuned S3 and await live
 re-measurement.
 
@@ -63,33 +65,33 @@ model samples at each of the six reasoning levels gave means of 45.97, 50.97, 37
 (Spearman rho=-0.116, permutation p=0.649). Across ten twin seeds at fixed `medium`, the
 mean was 42.11 (sample SD
 8.21; range 35.1--55.0; exploratory bootstrap 95% CI 37.52--47.26). See
-`docs/CODEX-TERRA-REASONING.md` and `docs/CODEX-TERRA-SEEDS.md`; the seed study measures
+`docs/MODEL-RUNS.md` (sensitivity studies); the seed study measures
 end-to-end variability because the model-sampling RNG itself was not fixed. Codex exposes
 reasoning effort but not a model-sampling seed, so the three reasoning replicates are
 independent stochastic samples with the simulator seed fixed at 1. Five additional
 medium-effort samples with that twin seed held fixed averaged 36.92 (sample SD 0.58,
 range 36.5--37.6; bootstrap 95% CI 36.50--37.36), showing substantially smaller
-observed model-sampling dispersion; see `docs/TERRA-FIXED-TWIN-REPLICATION.md`.
+observed model-sampling dispersion.
 
 One GLM-5.3 run through Z.AI scored 64.1 (PR 0.833, Regulation Gap +23.1). It prevented
 catastrophe in five scenarios but failed S1, leaving its worst-scenario score at zero.
 This is a single-run observation; configuration, exact replay verification, and artifact
-paths are recorded in `docs/GLM-5.3-ZAI.md`.
+paths are recorded in `docs/MODEL-RUNS.md`.
 
-Full per-run analysis: `docs/CALIBRATION.md`, `docs/LLM-BASELINE.md`,
-`docs/CODEX-LUNA.md`, `docs/CODEX-TERRA.md`, `docs/CODEX-SOL.md`,
-`docs/CODEX-ASTRA.md`, `docs/GLM-5.3-ZAI.md`. Per-decision
+Full per-run analysis: `docs/MODEL-RUNS.md` and `docs/CALIBRATION.md`. Per-decision
 transcripts with the models' own reasoning: `results/llm_traces/`.
 
-![S2 in the trainer: leak, blinded level control, catastrophe](docs/media/nh3ops-s2.gif)
+![The browser demo replaying a recorded agent run](docs/media/trainer.png)
 
-*Scenario S2 played out with no intervention in the browser trainer (the same twin
-agents run against): a flange leak fills the machine room while the level controller
-overfills the low-pressure drum, ending in CAT-1. Regenerate with
-`node trainer/record_gif.js` (Playwright) + `python viz/make_gif.py`.*
+*The demo replaying a recorded run of `google/gemini-3.7-flash` on task S2, stopped at
+decision 116 of 119. Top strip: the task clock, the decision being prepared, its price in
+deliberation tokens, and the model's own reasoning. Below it the decision timeline — bar
+width is the deliberation cost, the red line is the point of no return, already 14 minutes
+behind. The plant view shows only what the agent can see: two standing alarms, a worker
+dispatched to inspect the relief valve, and the level the frozen transmitter reports.*
 
-The AAAI-27 demonstration-track paper: built PDF in `paper/aaai27_demo.pdf`,
-LaTeX source at [nicl-nno/nh3bench-paper](https://github.com/nicl-nno/nh3bench-paper).
+The AAAI-27 demonstration-track paper: LaTeX source at
+[nicl-nno/nh3bench-paper](https://github.com/nicl-nno/nh3bench-paper).
 
 ## Quick start
 
@@ -176,6 +178,26 @@ mean.
 The table keeps three categories apart: the published matrix, runs you measured yourself
 (`results/user/`), and runs played in this browser.
 
+## Generated artifacts
+
+Two HTML deliverables are build outputs, not committed — regenerate rather than hand-edit.
+Each is a single self-contained file (inline CSS/JS/base64 assets).
+
+```bash
+python3 trainer/make_snapshots.py     # once, ~4 min: task start states
+python3 trainer/build_trainer.py      # -> trainer/nh3bench-demo.html (~3.3 MB)
+
+python3 viz/expert_data.py            # runs the twin -> viz/expert_data.json
+python3 viz/expert_figs.py            # matplotlib -> viz/expert_figs.json (base64 PNG)
+python3 viz/build_expert_doc.py       # -> viz/nh3bench-expert-guide.html (~750 KB)
+```
+
+The demo is the trainer plus Watch, Compare and the quick try, in English or Russian. The
+expert guide is written for a plant operator validating realism: briefing, planted faults,
+timeline under inaction, correct actions, typical errors, questions for the expert — and
+every curve in it comes from an actual simulation run, so retuning a scenario means
+rebuilding the figures or the document lies.
+
 ## Documentation
 
 | File | Contents |
@@ -188,19 +210,14 @@ The table keeps three categories apart: the published matrix, runs you measured 
 | `docs/VALIDATION-REPORT-ru.md` | physics-model validation report (Russian): data, findings, fixes, results |
 | `docs/BENCHMARK.md` | how to evaluate your own model: task, timing, running, reporting |
 | `docs/METRICS.md` | the metric set, the unified score, and what it does not mean |
-| `docs/LLM-BASELINE.md` | the first agent run, token-clock analysis, metered cost |
-| `docs/CODEX-LUNA.md` | Codex Luna setup, reproducibility, results, and limitations |
-| `docs/CODEX-TERRA.md` | Codex Terra results and comparison with Luna |
-| `docs/CODEX-TERRA-REASONING.md` | Terra sensitivity across all supported reasoning levels |
-| `docs/CODEX-TERRA-SEEDS.md` | Terra end-to-end variability over ten twin seeds |
-| `docs/CODEX-SOL.md` | Codex Sol results and comparison with Terra and Luna |
-| `docs/CODEX-ASTRA.md` | Codex Astra results and comparison with the GPT-5.6 Codex models |
-| `docs/DECISIONS.md` | why things are the way they are |
-| `docs/STATUS.md` | what's done, what's next |
-| `docs/DESIGN-original-ru.md` | full design document (Russian) |
+| `docs/MODEL-RUNS.md` | how every published run was made and verified, what it did, and the sensitivity studies |
+| `docs/DECISIONS.md` | why things are the way they are; the twin's known simplifications |
 
-Code comments and all expert-facing artifacts are in Russian by design — the validating
-audience is a Russian ammonia-plant operator.
+Code comments and documentation are in English. The plant's own language stays Russian by
+design — the 133 command names, the plant's replies, the observation text and the task
+briefings are the canonical task the published runs answered, and the expert-facing
+artifacts are written for the validating ammonia-plant operator. The demo interface is
+bilingual: English is substituted over the Russian labels, so nothing is lost either way.
 
 > The previous NH3Bench (a single-suction telemetry-control benchmark with a Haiku
 > reference agent) is preserved in this repository's git history prior to this tree.

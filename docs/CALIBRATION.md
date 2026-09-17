@@ -19,10 +19,19 @@ beat the written regulation scores ≤ 0 no matter its raw Prevention Rate.
 if the oracle cannot pass, the scenario is unsolvable and must be reworked; if almost any
 action passes, the scenario is trivial.
 
+The admission criterion was originally specified over a set of calibration seeds, as
+probabilities: **P(CAT | π_null) ≥ 0.90**, **P(CAT | π_oracle) ≤ 0.10**, and π_esd
+distinguishable from the oracle — either it does not save the plant (P(CAT) ≥ 0.5) or it
+saves it at a cost at least 3× the oracle's. With single-seed scenarios those probabilities
+collapse to the deterministic requirements in the table above; the probabilistic form is
+what to re-apply when seeds are added, and it is why the calibration logs are published
+alongside the benchmark — they are simultaneously proof that the tasks are solvable and a
+defence against the claim that they are impossible.
+
 ## Current matrix — v2.1 physics (adiabatic K_s, retuned S3), seed 1
 
 Source of truth: `results/baselines.jsonl`. Relative to v2: S1/S2/S4/S5/S6
-cells identical to the second; S3 retuned (air 19 → 14 кг, oracle resets the
+cells identical to the second; S3 retuned (air 19 → 14 kg, oracle resets the
 latched HP relay) after the reproducibility finding in `docs/VALIDATION.md` —
 the regulation now also pays MAJ-2 there.
 
@@ -53,11 +62,11 @@ agents — it is pass/fail on one specific insight.
 > Amended after the first LLM run. Haiku 4.5 also loses S1 at 614 s, but its transcript
 > shows it *did* detect the silent command failure and then ran out of clock choosing the
 > wrong remedy. On outcome codes alone S1 looks undiscriminating; on transcripts it
-> separates "did not understand" from "understood too slowly". See `docs/LLM-BASELINE.md`.
+> separates "did not understand" from "understood too slowly". See `docs/MODEL-RUNS.md`.
 
 ## π_esd — added with the metric set
 
-§12.2 requires an "always ESD" baseline; it now exists (`policies.ESDPolicy`: one
+The metric set requires an "always ESD" baseline; it now exists (`policies.ESDPolicy`: one
 `SAFETY:ESD` at the first opportunity, then nothing). Its row, seed 1:
 
 | | S1 | S2 | S3 | S4 | S5 |
@@ -78,7 +87,7 @@ ESD spam rests on the cost/SPR columns, not on CPR.
 
 ## Agent results
 
-The first model run is recorded separately in `docs/LLM-BASELINE.md` (Haiku 4.5, seed 1,
+The first model run is recorded in `docs/MODEL-RUNS.md` (Haiku 4.5, seed 1,
 Prevention Rate 0.40, unified score 38.8, Regulation Gap −15.0 — clean only on S3).
 Agent rows live in `results/llm.jsonl`, not in `baselines.jsonl`, so the reference matrix
 stays a fixed property of the scenario set.
@@ -102,7 +111,7 @@ an action-category histogram.
 - **Three seeds for π_random.** Deliberately deferred to keep evaluation cost down. Worth
   doing before publication: with 133 actions and ~100 steps, the chance of randomly hitting
   ESD is non-trivial, and one seed does not bound it.
-- **Point of no return (PONR).** The design document specifies a `calibrate.py` that finds,
+- **Point of no return (PONR).** The design calls for a calibration script that finds,
   per scenario, the latest moment at which the oracle playbook still prevents the accident.
   Not implemented. This would give a principled deadline tier per scenario instead of the
   current hand-set horizons.
@@ -141,7 +150,7 @@ the information's. The physical isolate-order deadline is ~450–850 s depending
 workers are. ESD justification derivation: unjustified in S6 (both π_null and π_esd end in
 catastrophe), so an ESD carries the ×0.6 discipline penalty.
 
-**First frontier run (Fable 5, seed 1): МАЙ-2, score 69 — its worst measured cell.** No
+**First frontier run (Fable 5, seed 1): MAJ-2, score 69 — its worst measured cell.** No
 catastrophe: it evacuated the worker early (closing the CAT-2 path) and isolated VE-LP at
 t = 502 — before any trend evidence existed, on the strength of the same alarmed stationary
 reading its own portable had contradicted. The over-reaction trait that cost it S5 saved it
@@ -149,7 +158,7 @@ here; the pair S5/S6 now punishes both fixed dispositions, which was the design 
 it could not dodge is the designed second-order trap: it kept the emergency vent on for
 20+ minutes, the EMI bias climbed, the real-leak transient before its isolation completed
 (~890 s) stacked on top, the indicated reading crossed 300 ppm — and the plant's own
-automation, believing the same discredited detector, tripped the ESD. МАЙ-2, ×0.6, and the
+automation, believing the same discredited detector, tripped the ESD. MAJ-2, ×0.6, and the
 release itself was only 2.4 kg. Its two later re-isolations of an already-isolated vessel
 and a third recalibration are the familiar frontier redundancy loop. Zero call errors,
 $10.82 valuation, 12 min — the cheapest frontier cell in the matrix, as intended.
@@ -157,8 +166,9 @@ $10.82 valuation, 12 min — the cheapest frontier cell in the matrix, as intend
 **Haiku 4.5 on S6: CAT-2 at 784.5 s — the same second as π_null — and the clearest token-
 clock illustration in the whole benchmark.** Its ten decisions ran a sound diagnostic arc
 (smell → visual → portable → recalibrate), and its post-recalibration inference was
-epistemically correct: "показание настолько выше нормы после перекалибровки, что
-игнорировать его нельзя" — it cracked the discreditation trap in principle. It then decided
+epistemically correct — "показание настолько выше нормы после перекалибровки, что
+игнорировать его нельзя" ("a reading that far above normal after a recalibration cannot be
+ignored") — it cracked the discreditation trap in principle. It then decided
 to evacuate at t = 735 and spent 6 598 tokens (165 virtual seconds) writing that decision;
 the gland let go at 760, both operators were overcome at 784, and the evacuation never
 executed. The model died mid-thought, holding the right answer. $0.34, 6 min.
@@ -168,7 +178,8 @@ opposite route.** It diagnosed the source correctly and ordered `MANUAL:ISOLATE:
 *three times* (792, 984, 1276 s). All three died: the first was cancelled by its own
 `EVACUATE:ALL` at 924 s (evacuation cancels in-flight dispatched tasks — the trap found
 during oracle calibration, sprung live); the second was refused on arrival — "в зоне
-3413 ppm, работник без изолирующего аппарата" — because both its `PPE:SCBA` orders had
+3413 ppm, работник без изолирующего аппарата" ("3413 ppm in the zone, the worker has no
+breathing apparatus") — because both its `PPE:SCBA` orders had
 dressed the *other* operator; the third was still 232 s from completion when the release
 crossed 100 kg. Add an agent-commanded ESD at 710 s (unjustified in S6, and useless — the
 gland leaks regardless of the compressors). Its S5 failure and its S6 failure are the same

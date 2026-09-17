@@ -1,15 +1,15 @@
-// ===================== ПИКСЕЛЬНАЯ КАРТИНА УСТАНОВКИ (v2) =====================
-// 384x216 логических пикселей. Рисуется процедурно, только из тех данных,
-// что видны программе-испытуемому. Трубная обвязка анимирована потоками,
-// обходчики ходят по коридорам в реальном времени раздумий.
+// ===================== PLANT PIXEL VIEW (v2) =========================
+// 384x216 logical pixels, drawn procedurally and only from the data the
+// evaluated agent can see. The piping is animated with flows, and the
+// operators walk the corridors in real deliberation time.
 
 const PIX = (function(){
   const W=384, H=216, SPINE=158;
   let S=3, cv=null, cx=null, off=null, ox=null, obs=null, fc=0, open=true;
   let bg=null, bgReady=false, sel=null;
-  const wpos={};   // последние координаты обходчиков для попадания кликом
+  const wpos={};   // last operator coordinates, for click hit-testing
 
-  // ---------- палитра ----------
+  // ---------- palette ----------
   const C={
     yard:"#26292d", yard2:"#2b2f33",
     wallTop:"#171a1d", wallFace:"#343b41", wallHi:"#4c545c",
@@ -27,7 +27,7 @@ const PIX = (function(){
     milk:"#cfe3d5", milkBad:"#d98b7f", glass:"#7fb0c9"
   };
 
-  // ---------- планировка ----------
+  // ---------- layout ----------
   const ZONES={
     ROOF:{x:8,y:6,w:192,h:40,f:C.roof,f2:C.roof2,lbl:"КРОВЛЯ",lblEn:"ROOF"},
     MACHINE_ROOM:{x:8,y:54,w:180,h:96,f:C.mr,f2:C.mr2,lbl:"МАШИННОЕ ОТДЕЛЕНИЕ",lblEn:"MACHINE ROOM"},
@@ -51,7 +51,7 @@ const PIX = (function(){
     ROOF:[[56,30],[194,30],[194,SPINE]]
   };
 
-  // ---------- база ----------
+  // ---------- primitives ----------
   function px(x,y,c){ ox.fillStyle=c; ox.fillRect(x|0,y|0,1,1); }
   function rc(x,y,w,h,c){ ox.fillStyle=c; ox.fillRect(x,y,w,h); }
   function frame(x,y,w,h,c){ rc(x,y,w,1,c); rc(x,y+h-1,w,1,c);
@@ -62,7 +62,7 @@ const PIX = (function(){
     for(let j=y;j<y+h;j++) for(let i=x+(j&1);i<x+w;i+=2) px(i,j,c2);
   }
 
-  // ---------- трубы ----------
+  // ---------- pipes ----------
   function pipe(pts, color, opt){
     opt=opt||{};
     const dashOn=opt.dash||0, sp=opt.anim?(opt.speed||1):0;
@@ -87,31 +87,31 @@ const PIX = (function(){
   function valve(x,y,c){ px(x-1,y-1,c); px(x-1,y+1,c); px(x+1,y-1,c);
     px(x+1,y+1,c); px(x,y,c); }
 
-  // ---------- агрегаты ----------
+  // ---------- machines ----------
   function comp(x,y,st,name){
-    // рама
+    // frame
     rc(x,y+18,38,3,C.steelD);
-    // электродвигатель
+    // electric motor
     rc(x+2,y+6,12,11,"#55606a"); frame(x+2,y+6,12,11,C.steelD);
     rc(x+3,y+7,10,2,C.steel);
     for(let i=0;i<4;i++) rc(x+3+i*3,y+9,1,7,"#49535c");
-    // муфта и винтовой блок
+    // coupling and screw block
     rc(x+14,y+9,3,5,C.steelD);
     rc(x+17,y+5,18,13,C.steel); frame(x+17,y+5,18,13,C.steelD);
     rc(x+18,y+6,16,3,C.steelL);
-    // маслоотделитель
+    // oil separator
     rc(x+30,y+2,5,3,C.steelD);
-    // патрубки
+    // nozzles
     rc(x+22,y+2,3,3,C.steelD); rc(x+8,y+3,3,3,C.steelD);
-    // вращение муфты
+    // coupling rotation
     if(st.run){
       const ph=Math.floor(fc/3)%4;
       const d=[[0,-1],[1,0],[0,1],[-1,0]][ph];
       px(x+15+d[0],y+11+d[1],C.run);
-      // дрожь работающего агрегата
-      if(fc%16===0){} // (визуальная пауза)
+      // shiver of a running machine
+      if(fc%16===0){} // (a visual pause)
       px(x+4,y+7,C.run);
-      // тепло над нагнетанием
+      // heat above the discharge
       if(st.tdis>80 && Math.floor(fc/4)%3!==0)
         px(x+23+((fc>>2)%2),y+(fc>>3)%2, "rgba(217,138,63,.6)");
     } else {
@@ -127,12 +127,12 @@ const PIX = (function(){
   }
 
   function vessel(x,y,w,h,lv,pTag,pVal,pMax){
-    // опоры
+    // supports
     rc(x+4,y+h,3,3,C.steelD); rc(x+w-7,y+h,3,3,C.steelD);
-    // корпус с торцами
+    // shell with end caps
     rc(x+1,y,w-2,h,"#31373c"); rc(x,y+1,1,h-2,"#31373c");
     rc(x+w-1,y+1,1,h-2,"#31373c");
-    // заливка по датчику
+    // fill level from the sensor
     const fh=Math.max(0,Math.min(1,lv/100))*(h-2);
     rc(x+1,y+h-1-fh,w-2,fh,C.liq);
     rc(x+1,y+h-1-fh,w-2,1,"#8fc4e0");
@@ -140,10 +140,10 @@ const PIX = (function(){
     px(x,y,C.steelD); px(x+w-1,y,C.steelD);
     px(x,y+h-1,C.steelD); px(x+w-1,y+h-1,C.steelD);
     rc(x+1,y+1,w-2,1,"#5a636b");
-    // указатель уровня (по тому же датчику -- честно)
+    // sight glass (from the same sensor -- honestly)
     rc(x+w+1,y,2,h,"#20242a"); rc(x+w+1,y+h-fh,2,fh,C.glass);
     frame(x+w,y-1,4,h+2,C.steelD);
-    // манометр со стрелкой
+    // gauge with a needle
     const gx=x+5, gy=y-5;
     rc(gx-2,gy-2,5,5,"#20242a"); frame(gx-2,gy-2,5,5,C.steel);
     const a=Math.max(0,Math.min(1,pVal/pMax))*Math.PI*1.5-Math.PI*1.25;
@@ -158,11 +158,11 @@ const PIX = (function(){
     if(hot){ body="#5c4326"; fin=C.warn; }
     else if(mode==="IDLE"){ body="#40464c"; fin=C.steelD; }
     else if(mode && mode!=="COOL"){ body="#4d4a35"; fin="#b9a15a"; }
-    // подвес
+    // suspension
     rc(x+2,y-2,1,2,C.steelD); rc(x+w-3,y-2,1,2,C.steelD);
     rc(x,y,w,h,body); frame(x,y,w,h,C.steelD);
     for(let i=x+2;i<x+w-2;i+=2) rc(i,y+1,1,h-4,fin);
-    // вентиляторы аппарата
+    // unit fans
     const nf=Math.max(1,Math.floor(w/14));
     for(let k=0;k<nf;k++){
       const fx=x+Math.floor(w*(k+0.5)/nf), fy=y+h-2;
@@ -170,30 +170,30 @@ const PIX = (function(){
         px(fx+(Math.floor(fc/3+1)%2)-1,fy,C.steel); }
       else px(fx-1,fy,C.steelD), px(fx,fy,C.steelD);
     }
-    // капель при оттайке
+    // dripping during defrost
     if(hot){
       const j=Math.floor(rnd(fc*7+x)*(w-2));
       px(x+1+j,y-1,C.warn); px(x+((j+5)%(w-2))+1,y-2,"#e8863f");
       if(Math.floor(fc/5)%2) px(x+w-3,y+h+((fc>>2)%2),C.glass);
     }
-    // соленоид подачи
+    // feed solenoid
     valve(x-3,y+Math.floor(h/2), feed?C.run:C.bad);
   }
 
   function cond(x,y,st){
-    // корпус градирни
+    // condenser shell
     rc(x,y+8,44,18,C.steel); frame(x,y+8,44,18,C.steelD);
     rc(x+1,y+9,42,2,C.steelL);
-    // каплеотбойники
+    // drift eliminators
     for(let i=0;i<6;i++) rc(x+3+i*7,y+13,5,1,C.steelD);
-    // поддон с водой
+    // water basin
     rc(x+1,y+22,42,3,"#2e5063");
     if(st.spray){ const ph=Math.floor(fc/3)%4;
       for(let i=0;i<7;i++){
         px(x+4+i*6, y+15+((ph+i)%4), C.glass); }
       px(x+2+((fc>>2)%40), y+23, "#7fc4de");
     }
-    // два вентоблока сверху
+    // two fan blocks on top
     for(let k=0;k<2;k++){
       const cxx=x+11+k*22, cyy=y+3;
       rc(cxx-6,y,13,8,C.steelD); frame(cxx-6,y,13,8,"#333a40");
@@ -203,7 +203,7 @@ const PIX = (function(){
         if(ph===0||ph===2){ rc(cxx-3,cyy,7,1,C.steelL); px(cxx,cyy-2,C.steelL); px(cxx,cyy+2,C.steelL); }
         else { px(cxx-2,cyy-2,C.steelL); px(cxx+2,cyy+2,C.steelL);
                px(cxx+2,cyy-2,C.steelL); px(cxx-2,cyy+2,C.steelL); px(cxx,cyy,C.steelL);}
-        // выброс тёплого воздуха
+        // warm air discharge
         if(Math.floor(fc/3)%2) px(cxx,y-2-((fc>>3)%2),"rgba(170,180,190,.5)");
       } else { px(cxx,cyy,C.steelD); rc(cxx-3,cyy,7,1,"#3d444b"); }
     }
@@ -225,12 +225,12 @@ const PIX = (function(){
     else px(x+1,y+2,"#5a636b");
   }
 
-  // ---------- обходчик ----------
+  // ---------- operator ----------
   function worker(xf,yf,o){
     const x=Math.round(xf), y=Math.round(yf);
     const stepPh=o.walk?Math.floor(fc/4)%4:0;
     const bob=(o.walk&&(stepPh===1||stepPh===3))?-1:0;
-    // ноги: 4 фазы
+    // legs: 4 phases
     if(o.walk){
       if(stepPh===0){ rc(x-2,y-4,2,4,C.pants); rc(x+1,y-4,2,4,C.pants); }
       else if(stepPh===1){ rc(x-3,y-4,2,3,C.pants); rc(x+1,y-4,2,4,C.pants);
@@ -239,16 +239,16 @@ const PIX = (function(){
       else { rc(x-2,y-4,2,4,C.pants); rc(x+2,y-4,2,3,C.pants);
         px(x+2,y-1,C.pants); }
     } else { rc(x-2,y-4,2,4,C.pants); rc(x+1,y-4,2,4,C.pants); }
-    // ботинки
+    // boots
     px(x-2,y-1,"#20242a"); px(x+2,y-1,"#20242a");
-    // туловище-жилет
+    // torso with a vest
     rc(x-2,y-10+bob,5,6,o.vest);
     rc(x-2,y-8+bob,5,1,C.stripe);
-    // руки
+    // arms
     if(o.work){
       const ph=Math.floor(fc/5)%2;
       rc(x+3,y-9+bob+ph,2,1,o.vest); px(x+5,y-8+bob+ph,C.skin);
-      // инструмент
+      // tool
       if(o.tool==="wrench"){ px(x+6,y-8+bob+ph,C.steelL);
         px(x+7,y-7+bob+ph,C.steelL);
         if(rnd(fc*13+x)>0.85){ px(x+7,y-9,C.stripe); px(x+8,y-8,"#fff2c0"); } }
@@ -257,15 +257,15 @@ const PIX = (function(){
     } else {
       rc(x-3,y-9+bob,1,3,o.vest); rc(x+3,y-9+bob,1,3,o.vest);
     }
-    // СИЗ: баллон за спиной
+    // SCBA: the cylinder on the back
     if(o.ppe){ rc(x-4,y-10+bob,2,5,"#5f8fa8"); px(x-4,y-11+bob,C.steelD); }
-    // голова
+    // head
     px(x,y-11+bob,o.ppe?C.mask:C.skin); px(x+1,y-11+bob,o.ppe?C.mask:C.skin);
     if(o.ppe) px(x+2,y-11+bob,"#3aa89c");
-    // каска с козырьком
+    // helmet with a brim
     rc(x-1,y-13+bob,4,2,o.helm); px(x+3,y-12+bob,o.helm);
     px(x,y-14+bob,o.helm);
-    // ход работы
+    // work in progress
     if(o.work && o.prog!==null){
       rc(x-5,y-17,11,2,"#20242a"); frame(x-5,y-17,11,2,C.steelD);
       rc(x-4,y-16,Math.round(9*Math.min(o.prog,1)),0.5+0.5,C.warn);
@@ -275,7 +275,7 @@ const PIX = (function(){
     }
   }
 
-  // ---------- клики и сведения ----------
+  // ---------- clicks and details ----------
   const HITS=[
     {id:"CO-01",k:"comp",x:14,y:60,w:38,h:22},{id:"CO-02",k:"comp",x:58,y:60,w:38,h:22},
     {id:"CO-03",k:"comp",x:102,y:60,w:38,h:22},{id:"CO-04",k:"comp",x:146,y:60,w:38,h:22},
@@ -430,13 +430,14 @@ const PIX = (function(){
     if(el) el.innerHTML=infoHTML(sel);
   }
 
-  // ---------- маршруты ----------
+  // ---------- routes ----------
   function route(a,b){
     const A=CH[a]||CH.CONTROL_ROOM, B=CH[b]||CH.CONTROL_ROOM;
     const pts=A.slice();
     pts.push([B[B.length-1][0],SPINE]);
     for(let i=B.length-1;i>=0;i--) pts.push(B[i]);
-    // len, а не L: имя L занято переводом подписей (см. renderLabels).
+    // len, not L: the name L belongs to the label translator (see
+    // renderLabels).
     let len=0, seg=[0];
     for(let i=1;i<pts.length;i++){
       len+=Math.abs(pts[i][0]-pts[i-1][0])+Math.abs(pts[i][1]-pts[i-1][1]);
@@ -456,37 +457,37 @@ const PIX = (function(){
     return r.pts[r.pts.length-1];
   }
 
-  // ---------- статичная сцена (рисуется один раз в кэш) ----------
+  // ---------- static scene (drawn once into a cache) ----------
   function renderStatic(){
     const keep=ox; ox=bg.getContext("2d");
-    // двор
+    // yard
     dither(0,0,W,H,C.yard,C.yard2);
     for(let i=0;i<60;i++)
       px(Math.floor(rnd(i*97)*W), Math.floor(rnd(i*53)*H), "#22252a");
-    // коридор с разметкой
+    // corridor with markings
     rc(8,152,368,14,C.cor);
     for(let i=12;i<372;i+=8) rc(i,164,4,1,C.corStripe);
     frame(7,151,370,16,C.wallTop);
-    // помещения: пол + стены с "высотой"
+    // rooms: floor plus walls with a "height"
     for(const z of Object.values(ZONES)){
       dither(z.x,z.y,z.w,z.h,z.f,z.f2);
       frame(z.x-1,z.y-1,z.w+2,z.h+2,C.wallTop);
       rc(z.x,z.y,z.w,1,C.wallHi);
       rc(z.x,z.y+z.h-1,z.w,1,C.wallFace);
     }
-    // проёмы дверей
+    // doorways
     for(const d of DOORS) rc(d[0],d[1],d[2],d[3],C.cor);
-    // лестница на кровлю (наружная, x194)
+    // ladder to the roof (outside, x194)
     for(let yy=48;yy<152;yy+=4){ rc(192,yy,5,1,C.steel); }
     rc(192,46,1,108,C.steelD); rc(196,46,1,108,C.steelD);
-    // иней в холодных камерах (базовый слой)
+    // frost in the cold rooms (base layer)
     for(let i=0;i<70;i++){
       const z=(i%2)?ZONES.LT_STORE:ZONES.BLAST;
       px(z.x+2+Math.floor(rnd(i*7)*(z.w-4)),
          z.y+2+Math.floor(rnd(i*13)*(z.h-4)),
          "rgba(207,224,238,.55)");
     }
-    // стеллажи в камерах
+    // racks in the rooms
     for(const z of [ZONES.LT_STORE,ZONES.BLAST]){
       for(let k=0;k<3;k++){
         const sx=z.x+8+k*24;
@@ -494,31 +495,31 @@ const PIX = (function(){
         rc(sx,z.y+23,16,1,"#403a32");
       }
     }
-    // сборный пункт: знак и ограждение
+    // assembly point: sign and railing
     rc(12,180,3,10,C.steel); rc(10,178,7,6,C.run);
     px(13,180,C.white); px(13,181,C.white); px(12,182,C.white); px(14,182,C.white);
     for(let i=24;i<70;i+=6) rc(i,208,4,1,C.steel);
-    // щитовая: пульт, корпуса экранов, тумба
+    // control room: desk, screen housings, cabinet
     rc(216,96,48,4,C.steelD);
     for(let k=0;k<3;k++){
       const mx=218+k*16;
       rc(mx,90,12,8,"#20242a"); frame(mx,90,12,8,C.steelD);
     }
     rc(214,126,10,6,"#5b5348");
-    // пастеризатор и корпус молочного танка (статика)
+    // pasteurizer and the milk tank shell (static)
     rc(286,64,22,26,C.steel); frame(286,64,22,26,C.steelD);
     for(let i=0;i<9;i++) rc(288+i*2,66,1,22,i%2?C.steelL:"#6a747c");
     rc(322,66,26,22,"#38424a");
     rc(322,64,26,3,C.steelL); rc(321,66,28,1,C.steel);
     frame(322,64,26,24,C.steelD);
-    // корпус льдоаккумулятора
+    // ice bank shell
     rc(14,128,58,20,"#31414d"); frame(14,128,58,20,C.steelD);
     rc(16,132,54,12,"#274050");
     ox=keep; bgReady=true;
   }
 
   function drawDynamicBits(){
-    // живые линии на экранах щитовой
+    // live traces on the control-room screens
     for(let k=0;k<3;k++){
       const mx=218+k*16;
       rc(mx+1,91,10,6,"#20242a");
@@ -527,7 +528,7 @@ const PIX = (function(){
         px(mx+2+i*2+((fc>>3)%2),yy,k===2?C.warn:C.run);
       }
     }
-    // мерцание инея (лёгкое, поверх статичной наледи)
+    // frost shimmer (light, over the static ice)
     for(let i=0;i<10;i++){
       const z=(i%2)?ZONES.LT_STORE:ZONES.BLAST;
       if(rnd(i*31+(fc>>3))>0.6)
@@ -539,13 +540,13 @@ const PIX = (function(){
   function drawHallFixed(T){
     const bad=(T.T_MILK||0)>6;
     rc(324,70,22,16,bad?C.milkBad:C.milk);
-    // мешалка
+    // agitator
     const ph=Math.floor(fc/4)%4;
     rc(334,66,1,6,C.steelD);
     if(ph===0) rc(330,72,9,1,"#b9d4c2");
     else if(ph===2) rc(333,70,3,3,"#b9d4c2");
     else { px(332+((ph===1)?0:4),71,"#b9d4c2"); px(336-((ph===1)?0:4),73,"#b9d4c2"); }
-    // трубка к пастеризатору
+    // pipe to the pasteurizer
     pipe([[308,80],[322,80]],bad?C.milkBad:C.milk,{anim:true,speed:1});
   }
 
@@ -559,36 +560,36 @@ const PIX = (function(){
     const naSD=(pu["PU-IP-A"]==="работа")||(pu["PU-IP-B"]==="работа");
     const hotAny=(o.evaps||[]).some(e=>e.mode==="HOTGAS");
 
-    // всас НД: ЦРНД -> КМ1, КМ2
+    // LP suction: VE-LP -> CO-01, CO-02
     pipe([[152,100],[152,92],[26,92],[26,84]],C.suc,{dash:3,anim:lpRun,speed:2});
     pipe([[70,92],[70,84]],C.suc,{dash:3,anim:lpRun,speed:2});
-    // нагнетание НД -> ЦРСД
+    // LP discharge -> VE-IP
     pipe([[80,60],[80,52],[100,52],[100,96]],"#c9976a",{anim:lpRun,speed:2});
-    // всас СД: ЦРСД -> КМ3, КМ4
+    // IP suction: VE-IP -> CO-03, CO-04
     pipe([[112,100],[112,96]],C.suc,{dash:3,anim:hpRun,speed:2});
     pipe([[112,96],[124,96],[124,84]],C.suc,{dash:3,anim:hpRun,speed:2});
     pipe([[124,96],[168,96],[168,84]],C.suc,{dash:3,anim:hpRun,speed:2});
-    // нагнетание ВД на кровлю
+    // HP discharge to the roof
     pipe([[172,60],[172,50],[184,50],[184,26],[168,26]],C.hot,
       {anim:hpRun,speed:3});
     pipe([[168,26],[110,26],[110,20]],C.hot,{anim:hpRun,speed:3});
     pipe([[140,26],[140,30]],C.hot,{anim:hpRun,speed:3});
-    // конденсат вниз в РЛ
+    // condensate down into VE-HP
     pipe([[64,32],[64,40],[12,40],[12,96],[20,96]],C.liq,{anim:hpRun,speed:2});
-    // жидкость РЛ -> ЦРСД (КУ-СД) -> ЦРНД (КУ-НД)
+    // liquid VE-HP -> VE-IP (IP level valve) -> VE-LP (LP level valve)
     pipe([[68,108],[74,108]],C.liq,{anim:hpRun,speed:1});
     valve(71,108,C.steelL);
     pipe([[122,108],[128,108]],C.liq,{anim:lpRun,speed:1});
     valve(125,108,C.steelL);
-    // насосная подача СД: к ВО-1 и в цех к ВО-2
+    // IP pumped feed: to EV-01 and into the hall to EV-02
     pipe([[88,133],[78,133],[74,133]],C.liq,{anim:naSD,speed:2});
     pipe([[102,133],[102,146],[240,146],[240,150]],C.liq,{anim:naSD,speed:2});
     pipe([[240,150],[276,150],[276,70],[283,70]],C.liq,{anim:naSD,speed:2});
-    // насосная подача НД: в холодные камеры
+    // LP pumped feed: into the cold rooms
     pipe([[140,133],[140,142],[254,142]],C.liq,{anim:naND,speed:2});
     pipe([[254,142],[254,170]],C.liq,{anim:naND,speed:2});
     pipe([[254,142],[342,142],[342,170]],C.liq,{anim:naND,speed:2});
-    // горячий пар на оттайку
+    // hot gas for defrost
     pipe([[178,50],[178,148],[262,148],[262,170]],C.hot,
       {dash:4,anim:hotAny,speed:3});
     pipe([[262,148],[350,148],[350,170]],C.hot,{dash:4,anim:hotAny,speed:3});
@@ -614,7 +615,8 @@ const PIX = (function(){
 
   function drawHaze(z,ppm){
     const zz=ZONES[z];
-    // пелена по всей зоне при аварийном уровне (>=70 ppm по стационарному)
+    // haze over the whole zone at an alarm level (>=70 ppm on the fixed
+    // detector)
     if(ppm>=70){
       const va=Math.min(0.06+ppm/1400,0.16);
       dither(zz.x+2,zz.y+2,zz.w-4,zz.h-4,
@@ -635,7 +637,7 @@ const PIX = (function(){
     }
   }
 
-  // ---------- кадр ----------
+  // ---------- frame ----------
   function draw(){
     fc++;
     requestAnimationFrame(draw);
@@ -649,29 +651,30 @@ const PIX = (function(){
     drawDynamicBits();
     drawPipes(obs,T);
 
-    // конденсаторы
+    // condensers
     const cd={}; (obs.conds||[]).forEach(c=>cd[c.tag]=c);
     cond(18,10, cd["CD-01"]||{fans:0}); cond(96,10, cd["CD-02"]||{fans:0});
 
-    // компрессоры
+    // compressors
     const cm={}; (obs.comps||[]).forEach(c=>cm[c.tag]=c);
     comp(14,60, cm["CO-01"]||{}); comp(58,60, cm["CO-02"]||{});
     comp(102,60, cm["CO-03"]||{}); comp(146,60, cm["CO-04"]||{});
 
-    // сосуды с манометрами (шкалы: РЛ до 20, ЦРСД до 8, ЦРНД до 4 бар абс)
+    // vessels with gauges (scales: VE-HP to 20, VE-IP to 8, VE-LP to 4 bar
+    // abs)
     vessel(16,100,52,16, T.LEVEL_VE_HP||0, mapLbl("РЛ"), T.P_COND||0, 20);
     vessel(78,100,44,16, T.LEVEL_VE_IP||0, mapLbl("ЦРСД"), T.P_SUC_IP||0, 8);
     vessel(130,100,44,16, T.LEVEL_VE_LP||0, mapLbl("ЦРНД"), T.P_SUC_LP||0, 4);
 
-    // насосы
+    // pumps
     const pu={}; (obs.pumps||[]).forEach(p=>pu[p.tag]=p.state);
     pumpU(82,126,pu["PU-IP-A"]); pumpU(100,126,pu["PU-IP-B"]);
     pumpU(134,126,pu["PU-LP-A"]); pumpU(152,126,pu["PU-LP-B"]);
 
-    // испарители
+    // evaporators
     const ev={}; (obs.evaps||[]).forEach(e=>ev[e.tag]=e);
     const e1=ev["EV-01"]||{};
-    // лёд в аккумуляторе
+    // ice in the bank
     const iceW=Math.round(((T.M_ICE_T||0)/34)*54);
     rc(16,132,54,12,"#274050");
     rc(16,132,iceW,12,"#bfd6e8");
@@ -689,7 +692,7 @@ const PIX = (function(){
     drawHaze("MACHINE_ROOM", T.NH3_MACHINEROOM_PPM||0);
     drawHaze("HALL", T.NH3_HALL_PPM||0);
 
-    // проблесковые маячки
+    // beacons
     const swp=Math.floor(fc/5)%4;
     function beacon(x,y,on,c){
       rc(x,y+2,5,2,C.steelD);
@@ -702,7 +705,7 @@ const PIX = (function(){
     beacon(360,56,(T.NH3_HALL_PPM||0)>50,C.bad);
     beacon(258,90,(obs.alarms||[]).length>0,C.warn);
 
-    // обходчики
+    // operators
     const tasks={}; (obs.wf||[]).forEach(t=>tasks[t.op]=t);
     const wcfg=[{helm:"#e8863f",vest:C.vest},{helm:"#5f8fc2",vest:C.vest2}];
     let idx=0;
@@ -730,7 +733,7 @@ const PIX = (function(){
       idx++;
     }
 
-    // подсветка выбранного объекта
+    // highlight of the selected object
     if(sel){
       let bx2=null;
       if(sel.k==="op"&&wpos[sel.id]){
@@ -751,7 +754,7 @@ const PIX = (function(){
       }
     }
 
-    // общий стоп: пульсирующая рамка
+    // emergency stop: a pulsing frame
     if(obs.esd){
       const a=0.35+0.3*Math.abs(Math.sin(fc/12));
       ox.fillStyle="rgba(212,88,74,"+a.toFixed(2)+")";
@@ -759,7 +762,7 @@ const PIX = (function(){
       ox.fillRect(0,0,2,H); ox.fillRect(W-2,0,2,H);
     }
 
-    // ---------- вывод и подписи ----------
+    // ---------- output and labels ----------
     cx.imageSmoothingEnabled=false;
     cx.clearRect(0,0,cv.width,cv.height);
     cx.drawImage(off,0,0,W*S,H*S);
@@ -775,7 +778,8 @@ const PIX = (function(){
       plate(zoneLbl(z), z.x+2, z.y+4.6);
     cx.fillStyle="#98a1a8";
     cx.font='500 '+(S>=3?10:9)+'px "IBM Plex Mono",monospace';
-    // Имя txt, а не L: L -- это перевод подписи, и затенять его нельзя.
+    // The name is txt, not L: L is the label translator, and shadowing it is
+    // not allowed.
     const txt=(t,x,y,c)=>{ if(c)cx.fillStyle=c; cx.fillText(t,x*S,y*S); };
     txt(mapLbl("КД1"),19,9.4); txt(mapLbl("КД2"),97,9.4,"#98a1a8");
     txt(mapLbl("КМ1"),16,59.2); txt(mapLbl("КМ2"),60,59.2);
@@ -807,7 +811,7 @@ const PIX = (function(){
       cx.fillRect((x-4)*S,(y+1)*S,cx.measureText(t).width+4,3.4*S);
       cx.fillStyle=c; cx.fillText(t,(x-3.5)*S,(y+3.8)*S);
     }
-    // легенда
+    // legend
     cx.font='500 '+(S>=3?10:9)+'px "IBM Plex Sans Condensed",sans-serif';
     const leg=[["— "+L("legLiquid"),C.liq],["– – "+L("legSuction"),C.suc],
       ["— "+L("legHotGas"),C.hot],["· "+L("legGas"),C.haze]];
@@ -821,7 +825,7 @@ const PIX = (function(){
       if(Math.floor(fc/10)%2)
         cx.fillText(L("esdBanner"),(W/2-34)*S,4.4*S);
     } else if((obs.alarms||[]).length){
-      // активная сигнализация (без общего стопа): мигающий транспарант
+      // active alarm (without an emergency stop): a blinking banner
       if(Math.floor(fc/12)%2){
         cx.font='700 '+(S>=3?12:10)+'px "IBM Plex Sans Condensed",sans-serif';
         const t=L("alarmBanner")+" ×"+obs.alarms.length;
@@ -834,7 +838,7 @@ const PIX = (function(){
     }
   }
 
-  // ---------- инициализация ----------
+  // ---------- initialization ----------
   function fit(){
     if(!cv) return;
     const box=document.getElementById("pixwrap");

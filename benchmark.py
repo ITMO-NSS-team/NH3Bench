@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-NH3Bench -- запуск бенчмарка на своей модели.
+NH3Bench -- running the benchmark on your own model.
 
     python benchmark.py list-scenarios
     python benchmark.py list-policies
@@ -9,17 +9,19 @@ NH3Bench -- запуск бенчмарка на своей модели.
     python benchmark.py replay
     python benchmark.py report
 
-Это тонкая обёртка: прогон выполняет tests/run_llm.py, пересчёт --
-tests/replay_llm.py, полную таблицу -- tests/report_metrics.py. Здесь только
-единый вход, понятные значения по умолчанию и паспорт прогона. Логика счёта
-не дублируется: балл и разрыв с регламентом берутся теми же функциями, что
-печатают опубликованную таблицу.
+This is a thin wrapper: a run is executed by tests/run_llm.py, the
+re-derivation by tests/replay_llm.py, and the full table by
+tests/report_metrics.py. What lives here is a single entry point, sane
+defaults and the provenance of a run. The scoring logic is not
+duplicated: the score and the Regulation Gap come from the same
+functions that print the published table.
 
-О повторных прогонах. Окружение бенчмарка детерминировано, сид сценария
-всегда 1 -- разброс даёт только сама модель. Поэтому повторы задаются числом
-попыток (--trials), а не сидами: попытка получает метку, сид остаётся
-прежним. Менять сид означало бы менять саму задачу, и прогоны стали бы
-несравнимыми.
+On repeated runs. The benchmark environment is deterministic and the
+scenario seed is always 1 -- the only source of spread is the model
+itself. Repeats are therefore given as a number of trials (--trials)
+rather than as seeds: a trial gets a label and the seed stays as it is.
+Changing the seed would change the task itself, and the runs would no
+longer be comparable.
 """
 
 from __future__ import annotations
@@ -39,7 +41,7 @@ ALL_SIDS = "S1,S2,S3,S4,S5,S6"
 
 
 # =========================================================================
-# Справочники
+# Catalogs
 # =========================================================================
 
 def cmd_list_scenarios(args):
@@ -72,14 +74,14 @@ def _wrap(text, width):
 
 
 # =========================================================================
-# Проверка работоспособности
+# Sanity check
 # =========================================================================
 
 def cmd_validate(args):
     """
-    Быстрая проверка, что установка на этой машине считается и даёт то же,
-    что заявлено. Полный прогон включается флагом --run: он занимает около
-    минуты, потому что задача начинается с выхода установки на режим.
+    Quick check that the plant computes on this machine and gives what is
+    claimed. The full run is enabled by --run: it takes about a minute, because
+    the task starts with bringing the plant up to its regime.
     """
     ok = True
 
@@ -158,15 +160,16 @@ def cmd_validate(args):
 
 
 # =========================================================================
-# Прогон модели
+# Running a model
 # =========================================================================
 
 def cmd_run(args):
     sids = args.scenarios or ALL_SIDS
     out = args.out or os.path.join(ROOT, "results", "llm.jsonl")
-    # Протоколы кладутся рядом с результатом. Для штатного прогона это
-    # общий каталог results/llm_traces; для прогона в свой файл -- свой
-    # каталог, иначе проба попала бы в опубликованную матрицу при пересчёте.
+    # Transcripts are placed next to the result. For a standard run that is the
+    # shared results/llm_traces directory; for a run into a file of your own it
+    # is a directory of your own, or a trial would land in the published matrix
+    # on the next re-derivation.
     trace_dir = args.trace_dir or (
         os.path.join(ROOT, "results", "llm_traces")
         if os.path.abspath(out) == os.path.join(ROOT, "results", "llm.jsonl")
@@ -180,8 +183,9 @@ def cmd_run(args):
                   f"проекта или в переменную среды.", file=sys.stderr)
             return 2
 
-    # Сброс буфера обязателен: дальше пишет подпроцесс в тот же поток, и без
-    # него заголовок оказывается в конце файла, когда лог перенаправлен.
+    # Flushing the buffer is required: a subprocess writes into the same stream
+    # next, and without the flush the header ends up at the end of the file
+    # when the log is redirected.
     print(f"модель:     {args.model} через {args.provider}")
     print(f"задачи:     {sids}")
     print(f"попыток:    {args.trials} (сид окружения всегда 1)")
@@ -195,8 +199,8 @@ def cmd_run(args):
 
     rc = 0
     for trial in range(1, args.trials + 1):
-        # Попытка -- это метка, а не другой сид: задача обязана остаться той
-        # же, иначе прогоны несравнимы.
+        # A trial is a label, not another seed: the task has to stay the same,
+        # or the runs are not comparable.
         tag = "" if args.trials == 1 else f"t{trial}"
         cmd = [sys.executable, os.path.join("tests", "run_llm.py"),
                "--provider", args.provider,
@@ -225,7 +229,7 @@ def cmd_run(args):
 
 
 # =========================================================================
-# Пересчёт и отчёт
+# Re-derivation and reporting
 # =========================================================================
 
 def cmd_replay(args):
@@ -239,15 +243,15 @@ def cmd_report(args):
             [sys.executable, os.path.join("tests", "report_metrics.py")],
             cwd=ROOT)
 
-    # Компактная таблица. Счёт берётся из того же места, что официальная:
-    # demo_manifest переиспользует metrics.bench_score_run и вывод
-    # обоснованности останова из прогонов π_null/π_esd.
+    # The compact table. The score comes from the same place as the official
+    # one: demo_manifest reuses metrics.bench_score_run and the
+    # shutdown-justification derived from the pi_null / pi_esd runs.
     import demo_manifest as DM
     man = DM.build(llm_globs=args.llm or DM.LLM_GLOBS)
     sids = [s["sid"] for s in man["scenarios"]]
 
     def row_name(a):
-        """Имя строки: модель плюс категория и язык задания."""
+        """Row name: the model plus its category and task language."""
         n = a["id"]
         if a.get("kind") == "user":
             n += " (свой)"
@@ -267,8 +271,9 @@ def cmd_report(args):
         for s in sids:
             v = a["scores"].get(s)
             cells += ("—" if v is None else f"{v:.0f}").rjust(6)
-        # Неполная строка помечается звёздочкой, а разрыв для неё не
-        # печатается: разность средних по разным наборам задач бессмысленна.
+        # An incomplete row is marked with an asterisk and its gap is not
+        # printed: a difference of means over different task sets is
+        # meaningless.
         part = not a["complete"]
         mean = ("—" if a["score_mean"] is None
                 else f"{a['score_mean']:.1f}" + ("*" if part else ""))

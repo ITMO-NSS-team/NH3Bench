@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Сборка экспертного описания в один HTML-файл."""
+"""Building the expert description into a single HTML file."""
 import json
 import os, os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -9,7 +9,7 @@ from expert_doc_text import (TITLE, SUBTITLE, PURPOSE, INTRO, TWIN, BENCH,
 D = os.path.dirname(os.path.abspath(__file__))
 F = json.load(open(os.path.join(D, "expert_figs.json")))
 
-# ======================= SVG-схемы =======================
+# ======================= SVG schematics =======================
 
 SVG_SCHEME = """
 <svg viewBox="0 0 940 560" xmlns="http://www.w3.org/2000/svg" font-family="DejaVu Sans, sans-serif">
@@ -375,7 +375,7 @@ parts.append(f"""<!DOCTYPE html><html lang="ru"><head><meta charset="utf-8">
 
 parts.append(INTRO)
 
-# Раздел 2 с врезкой схем
+# Section 2 with the schematics panel
 twin_parts = TWIN.split("<h3>2.2. Что имитируется</h3>")
 parts.append(twin_parts[0])
 parts.append(svgfig(SVG_SCHEME, 1,
@@ -390,7 +390,7 @@ parts.append(fig("fig_normal", 2,
 parts.append("<h3>2.3. Что упрощено" + twin_parts[1].split(
     "<h3>2.3. Что упрощено")[1])
 
-# Раздел 3 с планом и циклом
+# Section 3 with the layout and the cycle
 bench_parts = BENCH.split("<h3>3.2. Ход времени</h3>")
 parts.append(bench_parts[0])
 parts.append(svgfig(SVG_PLAN, 3,
@@ -402,7 +402,7 @@ parts.append(svgfig(SVG_CYCLE, 4,
 parts.append("<h3>3.3. Чем может" + bench_parts[1].split(
     "<h3>3.3. Чем может")[1])
 
-# Задача 1
+# Task 1
 s1p = S1.split("<h3>4.3. Развитие")
 parts.append(s1p[0])
 parts.append(svgfig(SVG_DEFROST, 5,
@@ -414,7 +414,7 @@ parts.append(fig("fig_s1", 6,
     "секунде, открытие подачи, гидроудар и разрыв на 614-й"))
 parts.append("<h3>4.4. Верные" + s1p[1].split("<h3>4.4. Верные")[1])
 
-# Задача 2
+# Task 2
 s2p = S2.split("<h3>5.4. Верные действия</h3>")
 parts.append(s2p[0])
 parts.append(fig("fig_s2", 7,
@@ -423,7 +423,7 @@ parts.append(fig("fig_s2", 7,
     "машзале"))
 parts.append("<h3>5.4. Верные действия</h3>" + s2p[1])
 
-# Задача 3
+# Task 3
 s3p = S3.split("<h3>6.3. Развитие")
 parts.append(s3p[0])
 parts.append(fig("fig_s3", 8,
@@ -431,7 +431,7 @@ parts.append(fig("fig_s3", 8,
     "в середине — признак воздуха (расхождение температур); внизу — молоко"))
 parts.append("<h3>6.3. Развитие" + s3p[1])
 
-# Задача 4
+# Task 4
 s4p = S4.split("<h3>7.3. Развитие")
 parts.append(s4p[0])
 parts.append(svgfig(SVG_TRAP, 9,
@@ -443,7 +443,7 @@ parts.append(fig("fig_s4", 10,
     "модели): около 9 кгс/см² на градус прогрева, разрыв через ~15 минут"))
 parts.append("<h3>7.3. Развитие" + s4p[1])
 
-# Задача 5
+# Task 5
 s5p = S5.split("<h3>8.3. Развитие")
 parts.append(s5p[0])
 parts.append(fig("fig_s5", 11,

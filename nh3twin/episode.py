@@ -1,20 +1,20 @@
 """
-Эпизод: цикл «наблюдение -> решение -> действие» в псевдореальном времени.
+Episode: the "observe -> decide -> act" loop in pseudo-real time.
 
-Ключевое свойство: время не останавливается, пока агент думает. Виртуальное
-время шага складывается из трёх частей:
+The key property is that time does not stop while the agent thinks. The
+virtual time of a step is made of three parts:
 
-    dt = размышление (токены / R) + исполнение действия + такт опроса
+    dt = deliberation (tokens / R) + action execution + polling tick
 
-где R -- скорость размышления в токенах на виртуальную секунду. При R = 40
-рассуждение в 4000 токенов стоит 100 виртуальных секунд, за которые установка
-успевает уйти далеко. Это переносит на модельную почву известный результат:
-при оценке в реальном времени избыточное размышление превращается из
-преимущества в обузу.
+where R is the deliberation rate in tokens per virtual second. At
+R = 40, reasoning of 4000 tokens costs 100 virtual seconds, and the
+plant travels far in that time. This carries a known result onto model
+ground: under real-time evaluation, excessive deliberation turns from an
+advantage into a burden.
 
-Агент видит НЕ состояние установки, а показания приборов -- с отказами,
-лагами и пропусками. Разрыв между показанием и фактом закрывается только
-нарядом человеку на ручной замер.
+The agent sees NOT the state of the plant but the instrument readings --
+with faults, lags and gaps. The gap between a reading and the fact is
+closed only by dispatching a person for a manual measurement.
 """
 
 from __future__ import annotations
@@ -30,18 +30,18 @@ from .dispersion import Operator
 from .actions import CATALOG, CATALOG_BY_ID, Workforce, Ctx
 
 
-# Скорость размышления, токенов на виртуальную секунду.
+# Deliberation rate, tokens per virtual second.
 THINK_RATE = 40.0
-# Такт опроса: минимальный интервал между решениями, с.
+# Polling tick: the minimum interval between decisions, s.
 POLL_PERIOD = 10.0
 
 
 # =========================================================================
-# Наблюдение
+# Observation
 # =========================================================================
 
-# Теги, которые видит агент. Намеренно не все: часть величин на установке
-# просто не оцифрована.
+# The tags the agent sees. Deliberately not all of them: some quantities on the
+# plant are simply not digitalized.
 VISIBLE_TAGS = [
     "P_SUC_LP", "P_SUC_IP", "P_COND", "T_EVAP_LP", "T_EVAP_IP", "T_COND",
     "LEVEL_VE_LP", "LEVEL_VE_IP", "LEVEL_VE_HP",
@@ -63,17 +63,17 @@ UNITS = {
 
 @dataclass
 class Observation:
-    t_rel: float                       # с от начала эпизода
+    t_rel: float                       # s since the start of the episode
     tags: dict
     equipment: dict
     alarms: list
-    reports: list                      # отчёты по завершённым нарядам
+    reports: list                      # reports on completed dispatches
     operators: dict
     pending_tasks: list
     note: str = ""
 
     def render(self) -> str:
-        """Текстовое представление для LLM-агента."""
+        """Text rendering for an LLM agent."""
         L = [f"[t = {self.t_rel:.0f} с]"]
         L.append("ПРИБОРЫ:")
         L.append("  " + "; ".join(
@@ -99,32 +99,36 @@ class Observation:
         return "\n".join(L)
 
 
-# Приборы щита, чьё показание может расходиться с фактом при отказе датчика.
-# Ключ -- тег наблюдения, значение -- (сосуд, вид прибора).
+# Panel instruments whose reading can disagree with the fact when a sensor
+# fails. The key is the observation tag, the value is (vessel, instrument
+# kind).
 _INSTRUMENTS = {
     "LEVEL_VE_LP": ("VE-LP", "level"), "LEVEL_VE_IP": ("VE-IP", "level"),
     "LEVEL_VE_HP": ("VE-HP", "level"),
     "P_SUC_LP": ("VE-LP", "pressure"), "P_SUC_IP": ("VE-IP", "pressure"),
     "P_COND": ("VE-HP", "pressure"),
 }
-# Температуры кипения на щите читаются по манометру всасывания, поэтому при
-# вранье манометра врут вместе с ним. Термометр конденсации (T_COND) --
-# отдельный прибор и остаётся истинным: на этом расхождении построен S3.
+# Evaporating temperatures on the panel are read off the suction gauge, so when
+# the gauge lies they lie with it. The condensing thermometer (T_COND) is a
+# separate instrument and stays truthful: S3 is built on that discrepancy.
 _EVAP_T_FROM_P = {"T_EVAP_LP": "P_SUC_LP", "T_EVAP_IP": "P_SUC_IP"}
 
 
 def indicated_tags(p: Plant, tg: dict) -> dict:
-    """Показания приборов щита из истинных тегов установки.
+    """
+    Panel instrument readings derived from the plant's true tags.
 
-    Щит показывает ПОКАЗАНИЯ, а не состояние: при отказе датчика уровня или
-    давления расхождение с фактом видит только тот, кто пошлёт человека на
-    ручной замер. Без отказа indicated_* возвращает факт, поэтому в норме
-    операция тождественна. plant.tags() намеренно остаётся истиной -- на нём
-    считаются физические метрики и трасса эпизода.
+    The panel shows READINGS, not the state: when a level or pressure sensor
+    fails, the disagreement with the fact is seen only by whoever sends a
+    person for a manual measurement. Without a fault indicated_* returns the
+    fact, so in normal operation this is the identity. plant.tags()
+    deliberately stays the truth -- the physical metrics and the episode
+    trace are computed on it.
 
-    Функция используется и стендом (build_observation), и тренажёром
-    (driver._sample): история показателей в тренажёре обязана врать так же,
-    как щит, иначе эксперт играет в другую игру, чем модели.
+    The function is used both by the benchmark (build_observation) and by
+    the trainer (driver._sample): the instrument history in the trainer must
+    lie exactly as the panel does, or the expert is playing a different game
+    than the models.
     """
     out = dict(tg)
     for tag, (vessel, kind) in _INSTRUMENTS.items():
@@ -156,7 +160,8 @@ def build_observation(ep: "Episode") -> Observation:
                   f"нагнетание {tg[co + '_TDIS']:.0f} °C")
     for ev in ("EV-01", "EV-02", "EV-03", "EV-04", "EV-05", "EV-06"):
         es = p.evap[ev]
-        # Агент видит РЕЖИМ ПО ДАННЫМ КОНТРОЛЛЕРА, а не физическое состояние.
+        # The agent sees THE MODE AS THE CONTROLLER REPORTS IT, not the
+        # physical state.
         eq[ev] = (f"режим {MODE_NAMES[es.plc_mode]}, "
                   f"подача {'открыта' if es.feed_valve else 'закрыта'}")
         if ep.coil_pressure_visible:
@@ -187,7 +192,7 @@ def build_observation(ep: "Episode") -> Observation:
 
 
 # =========================================================================
-# Эпизод
+# Episode
 # =========================================================================
 
 @dataclass
@@ -227,7 +232,7 @@ class Episode:
         self.log: list = []
         self.trace: list = []
 
-    # -- продвижение времени -------------------------------------------
+    # -- advancing time ---------------------------------------------------
 
     def advance(self, seconds: float):
         n = max(int(round(seconds / self.dt)), 1)
@@ -247,7 +252,10 @@ class Episode:
                 or bool(self.plant.cat_flags))
 
     def legal_actions(self) -> list:
-        """Каталог фиксирован; отсекаются лишь заведомо неисполнимые действия."""
+        """
+        The catalog is fixed; only actions that are certainly unexecutable are
+        filtered out.
+        """
         p = self.plant
         out = []
         for a in CATALOG:
@@ -272,11 +280,11 @@ class Episode:
             out.append(a)
         return out
 
-    # -- основной цикл ---------------------------------------------------
+    # -- main loop --------------------------------------------------------
 
     def run(self, policy) -> dict:
         wall0 = time.time()
-        # Небольшой разбег до первого решения
+        # A short run-up before the first decision
         self.advance(POLL_PERIOD)
         while not self.done():
             obs = build_observation(self)
@@ -286,7 +294,7 @@ class Episode:
             if act is None:
                 aid, act, tokens = "NO_OP", CATALOG_BY_ID["NO_OP"], tokens
 
-            # Время думания -- реальная часть шага
+            # Thinking time -- the real part of a step
             t_think = tokens / self.think_rate
             self.advance(t_think)
             if self.done():
@@ -305,7 +313,7 @@ class Episode:
 
         return self.result(time.time() - wall0)
 
-    # -- итог ------------------------------------------------------------
+    # -- result -----------------------------------------------------------
 
     def result(self, wall: float) -> dict:
         p = self.plant
@@ -331,16 +339,16 @@ class Episode:
             "operators": s["operators"],
             "wall_s": round(wall, 2),
             "actions": acts,
-            # Ниже -- величины, которые summary() считал всегда, а result()
-            # молча терял. Без них не считаются ни цена предотвращения, ни
-            # энергия, ни целостность продукта.
+            # Below are the quantities summary() always computed and result()
+            # silently lost. Without them neither the cost of prevention, nor
+            # the energy, nor the integrity of the product can be computed.
             "energy_kwh": s["energy_kwh"],
             "prv_kg": s["prv_kg"],
             "fenceline_peak_ppm": s["fenceline_peak_ppm"],
             "ruptured": s["ruptured"],
             "shock_events": s["shock_events"],
             "scrapped_kg": round(p.scrapped_kg, 1),
-            # Токены по решениям: для медианы и p95 суммы недостаточно.
+            # Tokens per decision: a sum is not enough for the median and p95.
             "tokens_per_step": [r.think_tokens for r in self.log],
             "t_per_step": [round(r.t, 1) for r in self.log],
         }

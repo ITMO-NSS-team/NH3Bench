@@ -1,16 +1,16 @@
 """
-Свойства аммиака (R717), таблицированные по давлению.
+Ammonia (R717) properties, tabulated against pressure.
 
-Зачем: прямой вызов CoolProp.PropsSI стоит ~110 мкс. Двойнику при dt=0.5 с и
-требовании 200x реального времени нужно ~50 тыс. обращений к свойствам в секунду
-настенного времени. Табуляция + numpy-интерполяция даёт ~0.5 мкс, то есть
-запас более чем в 200 раз.
+Why: a direct CoolProp.PropsSI call costs about 110 us. At dt = 0.5 s
+and a requirement of 200x real time the twin needs about 50 thousand
+property lookups per second of wall time. Tabulation plus numpy
+interpolation gives about 0.5 us, i.e. a margin of more than 200-fold.
 
-Точность: линейная интерполяция по логарифмической сетке давлений на 400 узлах
-в диапазоне 0.3...25 бар даёт погрешность < 0.05 % по всем величинам
-(проверяется в tests/test_props.py).
+Accuracy: linear interpolation on a logarithmic pressure grid of 400
+nodes over the range 0.3...25 bar gives an error below 0.05 % for every
+quantity (checked in tests/test_props.py).
 
-Все величины в СИ: Па, К, кг/м3, Дж/кг, Дж/(кг*К).
+Everything is in SI: Pa, K, kg/m3, J/kg, J/(kg*K).
 """
 
 from __future__ import annotations
@@ -20,9 +20,9 @@ import numpy as np
 
 _CACHE = os.path.join(os.path.dirname(__file__), "_nh3_table.npz")
 
-# Границы таблицы.
+# Table bounds.
 P_MIN = 0.30e5     # ~ -50 C
-P_MAX = 25.0e5     # ~ +58 C, выше расчётного давления стороны ВД
+P_MAX = 25.0e5     # ~ +58 C, above the design pressure of the HP side
 N_GRID = 400
 
 FLUID = "Ammonia"
@@ -48,12 +48,13 @@ def _build_table() -> dict:
     }.items():
         cols[name] = np.array([CP.PropsSI(out, "P", float(p), "Q", q, FLUID) for p in P])
 
-    # Внутренняя энергия: u = h - P/rho
+    # Internal energy: u = h - P/rho
     cols["u_l"] = cols["h_l"] - P / cols["rho_l"]
     cols["u_v"] = cols["h_v"] - P / cols["rho_v"]
     cols["h_fg"] = cols["h_v"] - cols["h_l"]
 
-    # Эффективная теплоёмкость перегретого пара: усредняем cp на 30 К перегрева.
+    # Effective heat capacity of superheated vapour: cp is averaged over 30 K
+    # of superheat.
     cpv_sh = []
     for p in P:
         Ts = CP.PropsSI("T", "P", float(p), "Q", 1, FLUID)
@@ -62,18 +63,18 @@ def _build_table() -> dict:
         cpv_sh.append((h2 - h1) / 30.0)
     cols["cp_v_sh"] = np.array(cpv_sh)
 
-    # Скорость звука в насыщенной жидкости: даёт АДИАБАТИЧЕСКИЙ модуль
-    # упругости K_s = rho*a^2 для расчёта гидроудара. Валидация V1 показала,
-    # что прежняя константа 1.03 ГПа была изотермическим модулем (K_T при
-    # -10 C) и занижала произведение rho*a на 16...37 %.
+    # Speed of sound in the saturated liquid: it gives the ADIABATIC bulk
+    # modulus K_s = rho*a^2 for the hydraulic-shock computation. Validation V1
+    # showed that the previous constant of 1.03 GPa was the isothermal modulus
+    # (K_T at -10 C) and underestimated the product rho*a by 16...37 %.
     cols["a_l"] = np.array(
         [CP.PropsSI("A", "P", float(p), "Q", 0, FLUID) for p in P])
 
-    # Показатель степени плотности перегретого пара: rho = rho_v*(Tsat/T)^n.
-    # n = 1 -- идеальный газ; реальный пар при конденсационных давлениях
-    # сжимаемее (Z растёт с перегревом), n ~ 1.2...1.5. Подгонка по точке
-    # с перегревом 40 К убирает погрешность до 9 % в углу горячего пара,
-    # найденную валидацией V1.
+    # Density exponent for superheated vapour: rho = rho_v*(Tsat/T)^n. n = 1 is
+    # an ideal gas; real vapour at condensing pressures is more compressible (Z
+    # grows with superheat), n ~ 1.2...1.5. Fitting at a point with 40 K of
+    # superheat removes the error of up to 9 % in the hot-gas corner that
+    # validation V1 found.
     n_sh = []
     for p in P:
         Ts = CP.PropsSI("T", "P", float(p), "Q", 1, FLUID)
@@ -90,9 +91,9 @@ def _load() -> dict:
     if os.path.exists(_CACHE):
         with np.load(_CACHE) as z:
             tab = {k: z[k] for k in z.files}
-        # Таблица прежней версии без новых колонок перестраивается
-        # (требует CoolProp; свежий npz закоммичен, так что у пользователей
-        # эта ветка не срабатывает).
+        # A table from an older version without the new columns is rebuilt
+        # (this needs CoolProp; a fresh npz is committed, so this branch does
+        # not fire for users).
         if "a_l" in tab and "n_rho_sh" in tab:
             return tab
     tab = _build_table()
@@ -104,8 +105,8 @@ _T = _load()
 _P = _T["P"]
 _LOGP = np.log(_P)
 
-# Сетка равномерна по log(P), поэтому индекс узла вычисляется аналитически:
-# поиск не нужен, интерполяция становится O(1) арифметикой.
+# The grid is uniform in log(P), so the node index is computed analytically: no
+# search is needed and interpolation becomes O(1) arithmetic.
 _LOG_LO = float(_LOGP[0])
 _DLOG = float(_LOGP[1] - _LOGP[0])
 _INV_DLOG = 1.0 / _DLOG
@@ -115,10 +116,11 @@ import math as _math
 
 
 def _interp(col: str, P):
-    """Линейная интерполяция по log(P). Экстраполяция зажимается по краям."""
+    """Linear interpolation in log(P). Extrapolation is clamped at the edges.
+    """
     tab = _T[col]
     if isinstance(P, (float, int)):
-        # Быстрый скалярный путь: ~0.35 мкс.
+        # Fast scalar path: about 0.35 us.
         if P < P_MIN:
             P = P_MIN
         elif P > P_MAX:
@@ -135,7 +137,7 @@ def _interp(col: str, P):
     return np.interp(np.log(np.clip(P, P_MIN, P_MAX)), _LOGP, tab)
 
 
-# --- Насыщение: функции от давления --------------------------------------
+# --- Saturation: functions of pressure ------------------------------------
 
 def Tsat(P):   return _interp("Tsat", P)
 def rho_l(P):  return _interp("rho_l", P)
@@ -153,25 +155,27 @@ def a_l(P):    return _interp("a_l", P)
 
 
 def K_liq(P):
-    """Адиабатический модуль упругости насыщенной жидкости K_s = rho*a².
+    """
+    Adiabatic bulk modulus of the saturated liquid, K_s = rho*a^2.
 
-    Именно он определяет скорость волны сжатия при гидроударе. Изотермический
-    модуль (1.0...1.4 ГПа) здесь неприменим: волна -- быстрый адиабатический
-    процесс; ошибка была найдена валидацией против CoolProp (docs/VALIDATION.md).
+    It is what sets the speed of a compression wave in a hydraulic shock.
+    The isothermal modulus (1.0...1.4 GPa) does not apply here: the wave is
+    a fast adiabatic process; the error was found by validation against
+    CoolProp (docs/VALIDATION.md).
     """
     a = _interp("a_l", P)
     return _interp("rho_l", P) * a * a
 
 
 def Psat(T):
-    """Обратная функция: давление насыщения по температуре."""
+    """The inverse function: saturation pressure from temperature."""
     return np.exp(np.interp(T, _T["Tsat"], _LOGP))
 
 
-# --- Перегретый пар ------------------------------------------------------
-# Модель: h(P,T) = h_v(P) + cp_v(P) * (T - Tsat(P)).
-# Для перегревов до ~80 К погрешность < 1.5 %, что достаточно для баланса
-# энергии установки и полностью достаточно для целей бенчмарка.
+# --- Superheated vapour ---------------------------------------------------
+# Model: h(P,T) = h_v(P) + cp_v(P) * (T - Tsat(P)). For superheats up to about
+# 80 K the error is below 1.5 %, which is enough for the plant's energy balance
+# and entirely enough for the purposes of the benchmark.
 
 def h_vap(P, T):
     return h_v(P) + cp_v(P) * (T - Tsat(P))
@@ -186,24 +190,27 @@ def s_vap(P, T):
 
 
 def rho_vap(P, T):
-    """Плотность перегретого пара: rho_v(P) * (Tsat/T)^n(P).
+    """
+    Density of superheated vapour: rho_v(P) * (Tsat/T)^n(P).
 
-    Показатель n затабулирован по CoolProp (n = 1 -- идеальный газ; реальный
-    пар при конденсационных давлениях даёт n до ~1.5). Прежняя модель с n = 1
-    завышала плотность до 9 % при 12 бар и перегреве 80 К."""
+    The exponent n is tabulated from CoolProp (n = 1 is an ideal gas; real
+    vapour at condensing pressures gives n up to about 1.5). The earlier
+    model with n = 1 overestimated the density by up to 9 % at 12 bar and
+    80 K of superheat.
+    """
     return rho_v(P) * (Tsat(P) / np.maximum(T, 1.0)) ** _interp("n_rho_sh", P)
 
 
 def h_isentropic(P1, T1, P2):
-    """Энтальпия после изоэнтропного сжатия из (P1,T1) в P2."""
+    """Enthalpy after isentropic compression from (P1,T1) to P2."""
     s1 = s_vap(P1, T1)
     T2s = Tsat(P2) * np.exp((s1 - s_v(P2)) / cp_v(P2))
     return h_v(P2) + cp_v(P2) * (T2s - Tsat(P2))
 
 
-# --- Двухфазный сосуд ----------------------------------------------------
-# Задача: по массе M, внутренней энергии U и объёму V найти давление.
-# Решается монотонное уравнение f(P) = V_calc(P) - V = 0.
+# --- Two-phase vessel -----------------------------------------------------
+# The problem: given mass M, internal energy U and volume V, find the pressure.
+# The monotone equation f(P) = V_calc(P) - V = 0 is solved.
 
 _VESSEL_P_LO = P_MIN * 1.001
 _VESSEL_P_HI = P_MAX * 0.999
@@ -212,10 +219,10 @@ _VESSEL_P_HI = P_MAX * 0.999
 def vessel_pressure(M: float, U: float, V: float,
                     P_guess: float = 3.0e5, tol: float = 1.0) -> tuple:
     """
-    Давление и паросодержание двухфазного сосуда.
+    Pressure and vapour quality of a two-phase vessel.
 
-    Возвращает (P, x, M_liq, M_vap). Метод — Brent по log(P) на монотонной
-    невязке объёма. Типично 12-18 итераций, ~15 мкс.
+    Returns (P, x, M_liq, M_vap). The method is Brent in log(P) on the
+    monotone volume residual. Typically 12-18 iterations, about 15 us.
     """
     if M <= 1e-9:
         return P_guess, 1.0, 0.0, 0.0
@@ -232,7 +239,7 @@ def vessel_pressure(M: float, U: float, V: float,
             x = 1.0
         return (1.0 - x) * M / _interp("rho_l", P) + x * M / _interp("rho_v", P) - V
 
-    # Секущие от подсказки предыдущего шага: обычно 3-5 итераций.
+    # Secant from the previous step's hint: usually 3-5 iterations.
     p0 = min(max(P_guess, _VESSEL_P_LO), _VESSEL_P_HI)
     p1 = min(max(p0 * 1.02, _VESSEL_P_LO), _VESSEL_P_HI)
     f0, f1 = resid(p0), resid(p1)
@@ -251,7 +258,7 @@ def vessel_pressure(M: float, U: float, V: float,
             break
 
     if not converged:
-        # Откат на бисекцию по log(P) -- надёжно, но медленнее.
+        # Fallback to bisection in log(P) -- reliable, but slower.
         lo, hi = _VESSEL_P_LO, _VESSEL_P_HI
         f_lo, f_hi = resid(lo), resid(hi)
         if f_lo * f_hi > 0:
@@ -273,24 +280,24 @@ def vessel_pressure(M: float, U: float, V: float,
     return P, float(x), (1 - x) * M, x * M
 
 
-# --- Прочее --------------------------------------------------------------
+# --- Miscellaneous --------------------------------------------------------
 
-# Историческая константа волновой скорости (1150 м/с) удалена: она была
-# получена из изотермического модуля упругости. Актуальная скорость волны
-# считается через K_liq(P) и поправку Кортевега в piping.wave_speed.
-M_MOL = 0.017031                   # кг/моль
-R_SPEC = 8.314462 / M_MOL          # Дж/(кг*К)
+# The historical wave-speed constant (1150 m/s) has been removed: it came from
+# the isothermal bulk modulus. The current wave speed is computed through
+# K_liq(P) and the Korteweg correction in piping.wave_speed.
+M_MOL = 0.017031                   # kg/mol
+R_SPEC = 8.314462 / M_MOL          # J/(kg*K)
 
-# Пороги токсичности, ppm (объёмные доли * 1e6)
+# Toxicity thresholds, ppm (volume fractions * 1e6)
 TLV_TWA = 25.0
 STEL = 35.0
 IDLH = 300.0
 ERPG_2 = 150.0
-LFL_VOL = 0.15      # нижний концентрационный предел распространения пламени
+LFL_VOL = 0.15      # lower flammability limit
 UFL_VOL = 0.28
 
 
 def ppm_from_kg_per_m3(c_kg_m3: float, T: float = 293.15, P: float = 101325.0) -> float:
-    """Перевод массовой концентрации в ppm по объёму."""
+    """Conversion of a mass concentration into ppm by volume."""
     rho_air = P / (287.05 * T)
     return 1e6 * (c_kg_m3 / rho_air) * (28.96 / 17.031)

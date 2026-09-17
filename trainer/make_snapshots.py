@@ -1,25 +1,27 @@
 # -*- coding: utf-8 -*-
 """
-Снимки задач на момент приёма смены.
+Task snapshots at the moment the shift is accepted.
 
-    py trainer/make_snapshots.py            # собрать снимки
-    py trainer/make_snapshots.py --check    # проверить совпадение с прогревом
+    py trainer/make_snapshots.py            # build the snapshots
+    py trainer/make_snapshots.py --check    # verify they match a warm-up
 
-Зачем. Каждая задача начинается с выхода установки на режим: полтора-два
-часа модельного времени, 7-14 тысяч шагов интегрирования. На CPython это
-20-42 с, в браузере втрое-впятеро дольше, и это время тратится заново при
-каждом «смотреть заново» -- а на стенде посетитель столько не ждёт.
+Why. Every task starts with bringing the plant up to its regime: one and
+a half to two hours of model time, 7-14 thousand integration steps. On
+CPython that is 20-42 s, in a browser three to five times longer, and
+that time is spent again on every "watch again" -- at a stand a visitor
+will not wait that long.
 
-Состояние эпизода после прогрева целиком укладывается в 42 КБ и
-восстанавливается за миллисекунду. Физика при этом не меняется: снимок --
-это ровно тот объект, который дал бы прогрев, и проверка --check убеждается,
-что продолжение расчёта из снимка совпадает с продолжением из прогрева
-шаг за шагом.
+The episode state after the warm-up fits entirely into 42 KB and is
+restored in a millisecond. The physics does not change in the process: a
+snapshot is exactly the object a warm-up would have produced, and the
+--check run confirms that continuing the computation from a snapshot
+matches continuing from a warm-up step by step.
 
-Снимок зависит от структуры классов имитатора. Если она изменилась, старый
-снимок загрузить не удастся -- тогда драйвер молча считает прогрев, как
-раньше, и достаточно перегенерировать снимки. Поэтому в них пишется версия
-формата и коммит.
+A snapshot depends on the class layout of the simulator. If that has
+changed, an old snapshot cannot be loaded -- the driver then silently
+computes the warm-up as before, and it is enough to regenerate the
+snapshots. That is why the format version and the commit are written
+into them.
 """
 
 from __future__ import annotations
@@ -39,26 +41,28 @@ sys.path.insert(0, os.path.join(ROOT, "trainer"))
 
 from nh3twin.episode import Episode                                 # noqa: E402
 from nh3twin.scenarios import SCENARIOS                             # noqa: E402
-# Отпечаток физики считает драйвер -- той же функцией, которой потом сверяет.
+# The physics digest is computed by the driver -- with the same function it
+# later verifies with.
 from driver import (sources_digest, SNAP_DIR,                       # noqa: E402
                     _mk_array, _mk_rng)
 
-# Каталог берётся у драйвера, а не задаётся здесь: иначе снимки пишутся в
-# одно место, а ищутся в другом -- и локально путь снимка не проверить.
+# The directory is taken from the driver rather than set here: otherwise
+# snapshots are written to one place and looked for in another -- and the
+# snapshot path could not be checked locally.
 OUT_DIR = SNAP_DIR
-# Пятый протокол есть и в CPython 3.11, и в Python 3.12 внутри Pyodide.
+# Protocol 5 exists both in CPython 3.11 and in the Python 3.12 inside Pyodide.
 PROTO = 5
 VERSION = 1
 
 
 class _PortablePickler(pickle.Pickler):
     """
-    Снимок, не зависящий от версии numpy.
+    A snapshot independent of the numpy version.
 
-    Внутренние представления numpy между 1.x и 2.x несовместимы по именам
-    модулей, а numpy в браузере свой. Поэтому массив пишется списком чисел,
-    скаляр -- обычным float, генератор -- своим состоянием; собирает их
-    обратно driver уже средствами той numpy, что есть.
+    numpy's internal representations are incompatible between 1.x and 2.x by
+    module names, and numpy in the browser is its own. So an array is
+    written as a list of numbers, a scalar as a plain float, a generator as
+    its state; the driver assembles them back with whatever numpy is there.
     """
 
     def reducer_override(self, obj):
@@ -98,11 +102,11 @@ def build(sids=None) -> dict:
 
 def portability(sid: str) -> list:
     """
-    Ссылки, которые могут не существовать в другой версии numpy.
+    References that may not exist in another numpy version.
 
-    Проверка нужна потому, что непереносимый снимок не ломается заметно: он
-    просто не загружается в браузере, драйвер уходит на прогрев, и всё
-    выглядит как «почему-то долго».
+    The check is needed because a non-portable snapshot does not break
+    visibly: it simply fails to load in the browser, the driver falls back to
+    a warm-up, and the whole thing looks like "somehow slow".
     """
     import io as _io
     import pickletools
@@ -112,7 +116,7 @@ def portability(sid: str) -> list:
     for op, arg, _pos in pickletools.genops(_io.BytesIO(blob)):
         if not isinstance(arg, str):
             continue
-        # Внутренности numpy: приватные модули и всё, что связано с random.
+        # numpy internals: private modules and anything related to random.
         if (arg.startswith("numpy._") or arg.startswith("numpy.core")
                 or arg.startswith("numpy.random")):
             bad.append(arg)
@@ -121,9 +125,9 @@ def portability(sid: str) -> list:
 
 def check(sids=None) -> int:
     """
-    Снимок обязан давать ту же траекторию, что прогрев. Иначе просмотр записей
-    показывал бы не тот эпизод, который был у модели, -- незаметно и потому
-    опасно.
+    A snapshot must give the same trajectory as a warm-up. Otherwise
+    watching a recording would show an episode other than the one the model
+    had -- unnoticeably, and therefore dangerously.
     """
     import numpy as np
     bad = 0
@@ -134,10 +138,10 @@ def check(sids=None) -> int:
         with open(path, "rb") as fh:
             snap = pickle.load(fh)
         a = snap["ep"]
-        b = Episode(SCENARIOS[sid], seed=1)          # честный прогрев
+        b = Episode(SCENARIOS[sid], seed=1)          # an honest warm-up
         d0 = float(np.max(np.abs(a.plant.y - b.plant.y)))
         ta = abs(a.plant.t - b.plant.t)
-        # и продолжение: пять минут задачи вперёд
+        # and the continuation: five minutes of the task ahead
         a.advance(300.0); b.advance(300.0)
         d1 = float(np.max(np.abs(a.plant.y - b.plant.y)))
         refs = portability(sid)
@@ -154,7 +158,7 @@ def check(sids=None) -> int:
 
 
 def as_files() -> dict:
-    """Снимки в виде {имя: base64} для встраивания в HTML тренажёра."""
+    """Snapshots as {name: base64} for embedding into the trainer HTML."""
     out = {}
     if not os.path.isdir(OUT_DIR):
         return out

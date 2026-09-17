@@ -1,10 +1,11 @@
 # -*- coding: utf-8 -*-
 """
-Драйвер интерактивной сессии тренажёра.
+Driver of an interactive trainer session.
 
-Исполняется в Pyodide (браузер) поверх нетронутых исходников имитатора.
-Воспроизводит цикл Episode.run, но вместо токенов размышления агента получает
-фактическое время раздумий человека (настенные секунды × масштаб).
+It runs in Pyodide (the browser) on top of the untouched simulator
+sources. It reproduces the Episode.run loop, but instead of an agent's
+deliberation tokens it receives the person's actual thinking time (wall
+seconds times a scale).
 """
 
 import json
@@ -16,11 +17,11 @@ from nh3twin.episode import (Episode, build_observation, indicated_tags,
                              POLL_PERIOD, VISIBLE_TAGS)
 from nh3twin.actions import CATALOG, CATALOG_BY_ID
 
-PROGRESS = None      # callback(frac) для полосы прогрева; ставится снаружи
+PROGRESS = None      # callback(frac) for the warm-up bar; set from outside
 
 
 def _base_with_progress(self, ep, operators):
-    """Копия Scenario._base с отчётом о ходе прогрева."""
+    """A copy of Scenario._base that reports warm-up progress."""
     ep.plant.t = self.start_hour * 3600.0
     saved = ep.plc.defrost_enabled
     ep.plc.defrost_enabled = self.defrost
@@ -41,24 +42,25 @@ SC.Scenario._base = _base_with_progress
 
 
 SNAP_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "snap")
-SNAP_USED = None     # чем начат последний эпизод: 'снимок' | 'прогрев'
+SNAP_USED = None     # how the last episode started: 'snapshot' | 'warm-up'
 
-# Файлы имитатора, от которых зависит траектория. Отпечаток их содержимого
-# кладётся в снимок и сверяется при загрузке.
+# Simulator files the trajectory depends on. A digest of their content is
+# stored in a snapshot and verified on load.
 _DIGEST_FILES = ("props.py", "config.py", "plant.py", "piping.py",
                  "dispersion.py", "control.py", "faults.py", "actions.py",
                  "episode.py", "scenarios.py")
 
 
 # -------------------------------------------------------------------------
-# Переносимость снимка между версиями numpy
+# Portability of a snapshot between numpy versions
 #
-# Обычный pickle массива numpy 2.x ссылается на numpy._core.multiarray,
-# которого в numpy 1.x просто нет, -- а в браузере numpy свой, из сборки
-# Pyodide. Такой снимок не загрузился бы, и тренажёр молча возвращался к
-# полному прогреву (именно это и происходило). Поэтому numpy-объекты
-# сохраняются через нейтральные конструкторы: список чисел, строка типа и
-# состояние генератора. Восстанавливает их та версия numpy, которая есть.
+# An ordinary pickle of a numpy 2.x array references numpy._core.multiarray,
+# which simply does not exist in numpy 1.x -- and in the browser numpy is its
+# own, from the Pyodide build. Such a snapshot would fail to load and the
+# trainer would silently fall back to a full warm-up (which is exactly what
+# happened). So numpy objects are saved through neutral constructors: a list of
+# numbers, a type string and the generator's state. Whatever numpy version is
+# present restores them.
 # -------------------------------------------------------------------------
 
 def _mk_array(values, dtype):
@@ -67,7 +69,9 @@ def _mk_array(values, dtype):
 
 
 def _mk_rng(state):
-    """Генератор с точно тем же состоянием: шум приборов обязан совпасть."""
+    """
+    A generator with exactly the same state: the instrument noise has to match.
+    """
     import numpy as np
     bg = np.random.PCG64()
     bg.state = state
@@ -76,12 +80,12 @@ def _mk_rng(state):
 
 def sources_digest() -> str:
     """
-    Отпечаток физики.
+    Digest of the physics.
 
-    Снимок состояния, снятый до правки коэффициентов, может загрузиться без
-    ошибки -- структура классов ведь не изменилась, -- и тренажёр незаметно
-    показывал бы прежнюю физику. Поэтому снимок годен только для той версии
-    исходников, на которой снят.
+    A state snapshot taken before a coefficient was edited can load without
+    an error -- the class layout has not changed, after all -- and the
+    trainer would unnoticeably show the earlier physics. A snapshot is
+    therefore valid only for the source version it was taken on.
     """
     import hashlib
     h = hashlib.sha256()
@@ -99,16 +103,16 @@ def sources_digest() -> str:
 
 def make_episode(sid: str):
     """
-    Эпизод на момент приёма смены.
+    The episode at the moment the shift is accepted.
 
-    Прогрев установки -- полтора-два часа модельного времени, то есть
-    7-14 тысяч шагов интегрирования; в браузере это десятки секунд, и
-    платить их заново при каждом перезапуске незачем. Снимок состояния даёт
-    ровно тот же объект (совпадение проверяется trainer/make_snapshots.py
-    --check), а если он не подошёл -- по несовпадению версий классов или
-    протокола, -- считаем прогрев, как раньше. Молчаливой подмены физики
-    здесь быть не может: либо восстановлено тождественное состояние, либо
-    оно посчитано заново.
+    Warming the plant up takes one and a half to two hours of model time,
+    i.e. 7-14 thousand integration steps; in a browser that is tens of
+    seconds, and there is no reason to pay them again on every restart. A
+    state snapshot gives exactly the same object (the match is checked by
+    trainer/make_snapshots.py --check), and if it did not fit -- because of
+    a class or protocol version mismatch -- we compute the warm-up as
+    before. A silent substitution of the physics cannot happen here: either
+    an identical state was restored, or it was computed anew.
     """
     global SNAP_USED
     path = os.path.join(SNAP_DIR, sid + ".pkl")
@@ -144,7 +148,10 @@ def scenarios_json() -> str:
 
 
 def _raw_en(obs, ep) -> str:
-    """Английский вид наблюдения. Нет модуля перевода -- отдаём русский."""
+    """
+    The observation in English. With no translation module we return the
+    Russian one.
+    """
     try:
         from nh3twin import prompt_en
         return prompt_en.obs_text(obs.render(), ep.scen.brief, ep.scen.sid)
@@ -153,21 +160,22 @@ def _raw_en(obs, ep) -> str:
 
 
 class Session:
-    SAMPLE_S = 10.0                 # шаг записи истории, виртуальные секунды
+    SAMPLE_S = 10.0                 # history sampling step, virtual seconds
 
     def __init__(self, sid: str, esd_just: bool = False):
         self.ep = make_episode(sid)
         self.sid = sid
-        # Обоснован ли аварийный останов в этом сценарии -- величина
-        # сценария, а не прогона: она выведена из опорных политик
-        # (report_metrics.esd_justification) и приходит из манифеста.
-        # Считать её здесь заново нечем: нужны прогоны бездействия и ESD.
+        # Whether an emergency shutdown is justified in this scenario is a
+        # property of the scenario, not of the run: it is derived from the
+        # reference policies (report_metrics.esd_justification) and arrives
+        # from the manifest. There is nothing here to recompute it with: that
+        # needs the inaction and ESD runs.
         self.esd_just = bool(esd_just)
         self.records = []           # {t, aid, think, exec, result}
         self.think_total = 0.0
         self.paused_used = False
-        # История всех видимых показателей ведётся на стороне физики:
-        # длинное ожидание даёт полную кривую, а не одну точку.
+        # The history of every visible instrument is kept on the physics side:
+        # a long wait then gives a full curve rather than a single point.
         self.hkeys = list(VISIBLE_TAGS)
         if self.ep.coil_pressure_visible:
             self.hkeys += [f"EV-0{i}_P" for i in range(1, 7)]
@@ -182,9 +190,9 @@ class Session:
         if (not force and self.samp_t
                 and t - self.samp_t[-1] < self.SAMPLE_S - 0.5):
             return
-        # История строится по ПОКАЗАНИЯМ приборов: замерший датчик обязан
-        # давать плоскую кривую и в тренажёре, иначе эксперт видит то, чего
-        # не видит агент.
+        # The history is built from the instrument READINGS: a frozen sensor
+        # must give a flat curve in the trainer too, or the expert sees what
+        # the agent does not.
         tg = indicated_tags(p, p.tags())
         self.samp_t.append(t)
         for k in self.hkeys:
@@ -192,7 +200,7 @@ class Session:
             self.samp[k].append(round(float(v), 2) if v is not None else None)
 
     def _adv(self, seconds: float):
-        """Продвижение порциями с записью истории и отчётом о ходе."""
+        """Advancing in chunks, with history recording and progress reports."""
         ep = self.ep
         total = max(seconds, 0.0)
         done = 0.0
@@ -205,7 +213,7 @@ class Session:
                 PROGRESS(done / total)
         self._sample(force=True)
 
-    # ---------------- наблюдение ----------------
+    # ---------------- observation ----------------
 
     def observe(self) -> str:
         ep, p = self.ep, self.ep.plant
@@ -243,8 +251,9 @@ class Session:
                   "loto": t in p.loto}
                  for t, s in p.cond.items()]
 
-        # Структура нарядов для анимации: происхождение маршрута берётся из
-        # текущей зоны работника (до прибытия она ещё прежняя).
+        # The dispatch structure for the animation: the origin of the route is
+        # taken from the worker's current zone (before arrival it is still the
+        # previous one).
         wf = []
         for t in ep.wf.pending.values():
             op = p.disp.operators[t.op_id]
@@ -274,16 +283,16 @@ class Session:
             "comps": comps, "evaps": evaps, "pumps": pumps, "conds": conds,
             "legal": [a.aid for a in ep.legal_actions()],
             "raw": obs.render(),
-            # То же наблюдение по-английски -- для английского интерфейса.
-            # Собирается тем же переводчиком, что и англоязычный трек
-            # задания, поэтому человек видит ровно то, что видела бы
-            # модель на английском задании.
+            # The same observation in English -- for the English interface. It
+            # is assembled by the same translator as the English task track, so
+            # a person sees exactly what a model on the English task would have
+            # seen.
             "raw_en": _raw_en(obs, ep),
             "note": ep.note,
         }
         return json.dumps(out, ensure_ascii=False)
 
-    # ---------------- действия ----------------
+    # ---------------- actions ----------------
 
     def act(self, aid: str, think_s: float) -> str:
         ep = self.ep
@@ -310,7 +319,7 @@ class Session:
         return json.dumps({"acted": result}, ensure_ascii=False)
 
     def wait(self, seconds: float, think_s: float) -> str:
-        """Осознанное наблюдение: раздумья + выдержка."""
+        """A deliberate observation: thinking plus the dwell."""
         self.think_total += think_s
         self._adv(max(think_s, 0.0) + max(seconds, 0.0))
         self.records.append({"t": round(self.ep.plant.t - self.ep.t0, 1),
@@ -323,7 +332,7 @@ class Session:
         return json.dumps({"acted": "наблюдение продолжено"},
                           ensure_ascii=False)
 
-    # ---------------- итог ----------------
+    # ---------------- result ----------------
 
     def final(self, forced: bool = False) -> str:
         ep, p = self.ep, self.ep.plant
@@ -350,14 +359,13 @@ class Session:
 
     def _score(self) -> dict:
         """
-        Балл прогона человека -- теми же функциями, что и опубликованная
-        таблица.
+        A person's run is scored by the same functions as the published table.
 
-        Строку прогона собирает Episode.result, балл считает
-        metrics.bench_score_run: ровно тот путь, которым посчитаны клетки
-        в results/. Своей формулы у тренажёра нет и быть не должно --
-        иначе результат человека нельзя было бы ставить рядом с
-        результатом модели.
+        Episode.result assembles the run row and metrics.bench_score_run
+        computes the score: exactly the path by which the cells in results/
+        were computed. The trainer has no formula of its own and must not have
+        one -- otherwise a person's result could not be placed next to a
+        model's.
         """
         try:
             from nh3twin import metrics
@@ -366,7 +374,8 @@ class Session:
             return {"score": metrics.bench_score_run(row),
                     "esd_justified": self.esd_just}
         except Exception as e:                      # noqa: BLE001
-            # Без балла итог всё равно показывается: исход и ущерб важнее.
+            # Without a score the result is still shown: the outcome and the
+            # damage matter more.
             return {"score": None, "score_err": str(e)[:200]}
 
 

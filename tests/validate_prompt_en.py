@@ -1,22 +1,24 @@
 # -*- coding: utf-8 -*-
 """
-Проверка англоязычного трека задания.
+Validation of the English task track.
 
-Русский трек -- канонический: на него отвечали 24 опубликованных прогона.
-Английский добавлен рядом и обязан удовлетворять четырём условиям.
+The Russian track is the canonical one: the published runs answered it.
+English was added alongside and has to satisfy four conditions.
 
-1. Русский промпт не изменился. Сравнение с версией из git: если байты
-   разошлись, опубликованные прогоны перестали быть воспроизводимыми.
-2. В английском промпте нет кириллицы -- ни в роли, ни в каталоге, ни в
-   наблюдении, ни в ответах установки. Непереведённый обрывок ушёл бы в
-   модель молча.
-3. Каталог совпадает по составу и порядку: те же 133 идентификатора. Задача
-   должна быть той же, отличаться может только язык описания.
-4. Вводные задач совпадают с теми, что показывает тренажёр (i18n.js,
-   I18N_SCEN). Иначе человек в демонстрации и модель в прогоне читали бы
-   разные условия.
+1. The Russian prompt has not changed. It is compared with the version
+   from git: if the bytes diverged, the published runs have stopped
+   being reproducible.
+2. The English prompt has no Cyrillic -- not in the role, not in the
+   catalog, not in the observation, not in the plant's replies. An
+   untranslated fragment would reach the model silently.
+3. The catalog matches in content and order: the same 133 identifiers.
+   The task has to be the same; only the language of its description
+   may differ.
+4. The task briefings match the ones the trainer shows (i18n.js,
+   I18N_SCEN). Otherwise a person in the demo and a model in a run
+   would be reading different conditions.
 
-Запуск:  python tests/validate_prompt_en.py
+Usage:  python tests/validate_prompt_en.py
 """
 
 import io
@@ -37,11 +39,12 @@ from nh3twin.episode import Episode, build_observation              # noqa: E402
 from nh3twin.scenarios import SCENARIOS                             # noqa: E402
 
 RU = re.compile("[Ѐ-ӿ]")
-BASE = "9840c4e"        # коммит до работ над демонстрацией
+BASE = "9840c4e"        # the commit before the work on the demo
 
 
 def _old_module(rev: str):
-    """Модуль llm_policy из указанной ревизии -- для сравнения промпта."""
+    """The llm_policy module from a given revision -- for comparing the prompt.
+    """
     src = subprocess.run(["git", "-C", ROOT, "show",
                           rev + ":nh3twin/llm_policy.py"],
                          capture_output=True, text=True,
@@ -85,7 +88,7 @@ def check_en_clean(fails):
         print("  английский трек: роль, каталог, вводные и ответы "
               "имитатора -- без кириллицы")
 
-    # Наблюдения всех шести задач в нескольких точках.
+    # Observations of all six tasks at several points.
     bad = 0
     for sid, scen in SCENARIOS.items():
         ep = Episode(SCENARIOS[sid], seed=1)
@@ -103,7 +106,7 @@ def check_en_clean(fails):
     else:
         print("  наблюдения шести задач (по три точки): без кириллицы")
 
-    # Полный промпт целиком -- как он уйдёт в модель.
+    # The full prompt as a whole -- as it will go to the model.
     ep = Episode(SCENARIOS["S2"], seed=1)
     obs = build_observation(ep)
     for what, text in (("системная часть", LP.system_prompt("en")),
@@ -131,7 +134,7 @@ def check_catalog(fails):
 
 
 def check_briefs(fails):
-    """Вводные задач должны совпадать с теми, что показывает тренажёр."""
+    """The task briefings must match the ones the trainer shows."""
     try:
         import quickjs
     except ImportError:

@@ -1,22 +1,22 @@
 // =====================================================================
-// Свои прогоны в таблице результатов.
+// The visitor's own runs in the results table.
 //
-// Балл человека считает не этот файл: он приходит из двойника, где его
-// считает та же metrics.bench_score_run, которой посчитаны клетки в
-// results/ (см. driver.Session._score). Здесь только хранение, сведение
-// в строку и удаление -- иначе строка человека не была бы сравнима со
-// строкой модели.
+// The score is not computed here: it comes from the twin, where the same
+// metrics.bench_score_run that produced the cells in results/ computed it
+// (see driver.Session._score). This file only stores, aggregates and
+// deletes -- otherwise a person's row would not be comparable with a
+// model's row.
 //
-// Хранилище -- localStorage этого браузера. Ничего никуда не уходит, и об
-// этом сказано в самой таблице: опыт, поставленный на стенде, не должен
-// выглядеть как часть опубликованного набора.
+// Storage is this browser's localStorage. Nothing is sent anywhere, and
+// the table says so: an experiment run at a conference stand must not
+// look like part of the published set.
 // =====================================================================
 
 const MINE_KEY = "nh3.myruns";
 const MINE_NAME_KEY = "nh3.myname";
-const MINE_MAX = 200;              // больше в localStorage держать незачем
+const MINE_MAX = 200;              // more is pointless in localStorage
 
-// Русские подписи; английские -- в I18N_JS по тем же ключам.
+// Russian labels; the English ones are in I18N_JS under the same keys.
 const ML = {
   mineHead: "Ваши прогоны",
   mineNote: "Сохранены только в этом браузере и никуда не отправляются.",
@@ -45,7 +45,7 @@ function mineRead(key, dflt) {
   try {
     const v = localStorage.getItem(key);
     return v === null ? dflt : v;
-  } catch (e) { return dflt; }        // приватное окно -- просто без памяти
+  } catch (e) { return dflt; }        // a private window -- simply no memory
 }
 
 function mineWrite(key, val) {
@@ -74,15 +74,16 @@ function mineSetName(n) {
   return v || L("mineDefault");
 }
 
-// Прогон, собранный из итога задачи. Балл берётся как есть; прерванный
-// вручную прогон и быстрая проба в среднее не идут -- это не полная задача.
+// A run assembled from the task result. The score is taken as it is; a
+// hand-stopped run and a quick try do not enter the mean -- neither is a
+// complete task.
 function mineRun(f, kind, name) {
   const sc = (typeof SCEN !== "undefined")
     ? SCEN.find(x => x.sid === f.sid) : null;
   const forced = !!f.forced;
-  // Протокол хранится вместе с итогом: без последовательности команд свой
-  // прогон нельзя поставить рядом с прогоном модели в сравнении решений.
-  // Формат сжатый -- [секунда, команда, цена решения в секундах].
+  // The command sequence is stored with the result: without it the visitor's
+  // run could not be placed next to a model's run in the decision comparison.
+  // Compact form -- [second, command, cost of the decision in seconds].
   const rec = (f.records || []).slice(0, 400)
     .map(r => [Math.round(r.t || 0), String(r.aid || ""),
                Math.round(r.think || 0)])
@@ -93,7 +94,8 @@ function mineRun(f, kind, name) {
     agent: String(name || mineName()).slice(0, 40),
     scenario: f.sid,
     records: rec,
-    // Язык задания -- часть того, что человек читал, ровно как у модели.
+    // The task language is part of what the person read, exactly as for a
+    // model.
     prompt_lang: (typeof LANG !== "undefined" && LANG === "en") ? "en" : "ru",
     score: (f.score === null || f.score === undefined) ? null : f.score,
     CAT: f.CAT || [], MAJ: f.MAJ || [],
@@ -106,9 +108,9 @@ function mineRun(f, kind, name) {
   };
 }
 
-// Добавление: прежний результат той же задачи в том же опыте заменяется.
-// Иначе в строке оказалось бы несколько попыток одной задачи, и было бы
-// неясно, какая из них в среднем.
+// Adding replaces the previous result of the same task in the same
+// experiment. Otherwise one row would hold several attempts at one task, and
+// it would be unclear which of them is in the mean.
 function mineAdd(f, kind, name) {
   const r = mineRun(f, kind, name);
   const arr = mineLoad();
@@ -116,8 +118,9 @@ function mineAdd(f, kind, name) {
                                  && x.scenario === r.scenario));
   const replaced = arr.length - kept.length;
   kept.push(r);
-  // Ответ хранилища важен: в приватном окне и при переполнении запись не
-  // проходит, и говорить «добавлено» в этом случае нельзя.
+  // The storage answer matters: in a private window and when the quota is
+  // exhausted the write does not go through, and saying "added" would then be
+  // a lie.
   const ok = mineSave(kept);
   return { run: r, replaced: replaced, ok: ok };
 }
@@ -127,12 +130,12 @@ function mineDelAgent(kind, agent) {
 }
 
 function mineClear() {
-  try { localStorage.removeItem(MINE_KEY); } catch (e) { /* и так пусто */ }
+  try { localStorage.removeItem(MINE_KEY); } catch (e) { /* already empty */ }
 }
 
-// Сведение в строки таблицы по тем же правилам, что demo_manifest:
-// среднее -- только по зачтённым задачам, разрыв с регламентом -- только у
-// полной строки. Среднее по части задач не сравнимо со средним по всем.
+// Aggregation into table rows by the same rules as demo_manifest: the mean
+// covers scored tasks only, and the Regulation Gap only a complete row. A
+// mean over part of the tasks is not comparable with a mean over all of them.
 function mineAgents() {
   const sids = MANIFEST.scenarios.map(s => s.sid);
   const reg = MANIFEST.agents.find(a => a.id === "regulation");
@@ -158,17 +161,18 @@ function mineAgents() {
     a.reg_gap = (a.complete && reg && reg.score_mean !== null)
       ? Math.round((a.score_mean - reg.score_mean) * 10) / 10 : null;
   });
-  // Полные строки выше, дальше по среднему; демо -- в конце.
+  // Complete rows first, then by the mean; the quick try goes last.
   return out.sort((x, y) => (x.kind === "quick") - (y.kind === "quick")
                             || (y.score_mean || 0) - (x.score_mean || 0));
 }
 
 // ---------------------------------------------------------------------
-// Свой прогон в сравнении решений
+// The visitor's run in the decision comparison
 //
-// Сравнение выравнивает две последовательности команд; физика у своего
-// прохождения та же, что у прогона модели, поэтому строки сопоставимы.
-// Пересчёта здесь нет: время, команды и цена решения -- из протокола.
+// The comparison aligns two command sequences; the physics of a person's
+// run is the same as a model's, so the rows are commensurable. Nothing is
+// recomputed here: times, commands and the cost of a decision come from
+// the stored record.
 // ---------------------------------------------------------------------
 
 function mineShape(r) {
@@ -180,8 +184,9 @@ function mineShape(r) {
     clean: !(r.CAT || []).length && !(r.MAJ || []).length,
     t_end_s: r.t_end_s, horizon_s: r.horizon_s,
     forced: !!r.forced, mine: true,
-    // В просмотр запись не идёт: двойник её не переигрывает, там нужен
-    // протокол с токенами. В сравнении решений она полноценна.
+    // The record does not go into Watch: the twin does not replay it, that
+    // needs a per-decision transcript with tokens. In the decision comparison
+    // it is complete as it is.
     watchable: false,
     trace_stats: { n_decisions: (r.records || []).length },
   };
@@ -198,8 +203,8 @@ function mineDiffRunById(id) {
   return r ? mineShape(r) : null;
 }
 
-// Цена решения человека -- секунды, а не токены: он их не тратит, но часы
-// задачи ему начислены теми же секундами.
+// A person's decision costs seconds, not tokens: they spend none, but the
+// twin charged their deliberation to the task clock in exactly those seconds.
 function mineDiffSteps(id) {
   const r = mineLoad().find(x => x.id === id);
   if (!r) return null;
@@ -209,15 +214,16 @@ function mineDiffSteps(id) {
 }
 
 // ---------------------------------------------------------------------
-// Добавление из итогового экрана и из быстрой пробы
+// Adding from the result screen and from the quick try
 // ---------------------------------------------------------------------
 
-// Один и тот же блок на двух экранах: поле с названием опыта и кнопка.
-// Название запоминается, поэтому вторая задача попадает в тот же опыт без
-// повторного ввода.
-// Элементы помечены классами, а не id: этот блок живёт сразу на двух
-// экранах, и поиск по id находил кнопку чужого экрана -- она стоит в
-// разметке выше, поэтому обработчик уходил на невидимую кнопку.
+// One and the same block on two screens: the experiment-name field and the
+// button. The name is remembered, so the second task lands in the same
+// experiment without typing it again.
+//
+// The parts are marked with classes rather than ids: this block lives on two
+// screens at once, and a lookup by id found the other screen's button -- it
+// sits higher in the markup, so the handler went to an invisible button.
 function mineAddHTML(kind) {
   return "<div class='mineadd'>" +
     "<span class='lbl'>" + L("mineAdd") + "</span>" +

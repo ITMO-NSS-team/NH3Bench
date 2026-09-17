@@ -1,7 +1,7 @@
 # CLAUDE.md — NH3Ops-Bench
 
-Context for Claude Code sessions on this repo. Read this first, then `docs/STATUS.md`
-for what to work on next.
+Context for Claude Code sessions on this repo. Read this first; §9 says where to pick
+up.
 
 ---
 
@@ -56,14 +56,14 @@ nh3twin/            the digital twin + agent layer (import root)
   policies.py       null / random / rules / regulation / oracle / esd
   llm_policy.py     LLM adapter: prompt assembly, action parsing, token accounting; ReplayPolicy
   prompt_en.py      the English task track: role, catalog, observation, plant replies
-  metrics.py        the §11 metric set: trace metrics, aggregates, PONR-based timing
+  metrics.py        the metric set: trace metrics, aggregates, PONR-based timing
   scenarios.py      the six benchmark scenarios (v2 + S6)
   runner.py         plain simulation runs without an agent
   providers.py      provider layer: OpenRouter adapter + factory; llm_policy.py untouched
 benchmark.py        user-facing CLI: run / replay / report / validate / list-*
 tests/              run_baselines.py (calibration matrix), run_regimes.py (regime sanity),
                     run_llm.py (LLM episodes), replay_llm.py (re-derive from traces),
-                    report_metrics.py (the §11 table), report_llm.py (older compact report),
+                    report_metrics.py (the results table),
                     calibrate_ponr.py, validate_props.py / _shock.py / _robustness.py,
                     validate_prompt_en.py (the English track: nothing left in Russian)
 results/           baselines.jsonl + base_S6.jsonl (current matrix), baselines_v1.jsonl,
@@ -77,11 +77,11 @@ trainer/            browser trainer and demo, one self-contained HTML:
                     diff (inside watch.js): LCS alignment of two runs' commands,
                     i18n.js (EN/RU), demo_manifest.py (what runs exist),
                     make_snapshots.py (task start states), build_trainer.py
-paper/              built AAAI-27 demo paper; LaTeX source is a separate repository
 docs/               architecture, scenarios, calibration, decisions, status, BENCHMARK.md
 ```
 
-Build artifacts (HTML) are generated, not committed — see `docs/ARTIFACTS.md`.
+Build artifacts (HTML) are generated, not committed — the build commands are in the
+README under "Generated artifacts".
 
 ---
 
@@ -123,14 +123,13 @@ python benchmark.py report            # compact table; --full for every metric
 
 # English task track. The Russian task stays the default and the canonical one.
 python benchmark.py run --provider openrouter --model <slug> --prompt-lang en \
-       --out results/user/openrouter_en.jsonl --trace-dir results/user/traces_en
+       --out results/user/runs.jsonl --trace-dir results/user/traces
 python tests/validate_prompt_en.py     # ~4 min: seven warm-ups
 
 # Metrics (docs/METRICS.md). PONR calibration is slow (~10 min/scenario) but cached.
 python3 tests/calibrate_ponr.py --scenarios S1 --out results/ponr_S1.json
 python3 tests/replay_llm.py      # re-derive agent episodes from transcripts
-python3 tests/report_metrics.py  # the full §11 table
-python3 tests/report_llm.py      # older compact report (kept for quick checks)
+python3 tests/report_metrics.py  # the full results table
 
 # Rebuild expert artifacts
 python3 viz/expert_data.py && python3 viz/expert_figs.py && python3 viz/build_expert_doc.py
@@ -292,10 +291,26 @@ is recorded in `docs/DECISIONS.md`.
 
 ## 5. Conventions
 
-**Language.** All code comments, docstrings, log messages, and every expert-facing
-artifact are in **Russian** and must stay that way — the validating audience is a Russian
-ammonia-plant operator. These `docs/*.md` handoff files are in English. When writing
-Russian prose, use plain engineering register: no LLM-ish hedging, no marketing tone.
+**Language.** Code comments and docstrings are in **English** — the repository is
+published for a research audience. Four things stay **Russian**, and each for a reason
+that breaks something if ignored:
+
+| what | why it stays Russian |
+|---|---|
+| the simulator's runtime strings: 133 command names, plant replies, observation text, scenario briefings | they *are* the canonical task. `prompt_en.py` and `i18n.js` recognize them by their exact text, and the published runs answered them; editing one invalidates 54 runs and both translation layers |
+| the trainer's Russian interface (markup, `WL` / `QL` / `ML`) | the demo is bilingual by design; English is substituted on top, so a missing key shows Russian rather than nothing |
+| console output and argparse help of the scripts | some of it is not output but *data*: `report_metrics.POLICY_LEGEND` and `outcome()` supply the Russian labels of the demo's results table through `demo_manifest`. Translating them would strip the Russian side of the demo |
+| `docs/VALIDATION-REPORT-ru.md`, `viz/expert_doc_text.py` and the expert charts | deliverables for the validating ammonia-plant operator, not working notes |
+
+When a comment has to quote one of those strings (`«команда агента»`, `КМ1/ЦР-НД`,
+`КАТ-1/УЩ-2`), quote it as it is: the comment explains code that matches that exact text.
+
+Comments and docstrings were translated mechanically safely: only comment tokens and
+docstring literals were rewritten, and the token stream of every file was compared before
+and after, so no string literal could move. The evidence that it held: `S1` inaction still
+gives CAT-3 at 614.0 s with 8.80 kg released, `validate_prompt_en.py` reports the Russian
+prompt byte-identical to the pre-demo revision, and the clock self-test passes on all
+6211 recorded steps.
 
 **The trainer interface is bilingual, the simulator is not.** Four layers, and they are
 easy to confuse:
@@ -538,7 +553,7 @@ will silently send every task start back to a full warm-up.
   markup.** Russian labels sit in the HTML and English ones are substituted on top, so
   under the quickjs shim a `data-i18n` element reads as empty in Russian — that is the
   harness, not a bug. Label coverage is checked by parsing the built HTML
-  (`markup.py`-style), behaviour by executing it; do not mix the two.
+  (parse the built HTML), behaviour by executing it; do not mix the two.
 - **Don't substitute a long instrument name where a short panel label was.** The panel
   had its own short captions ("Молоко", "Уровень ЦР-НД"); reusing `TAGMETA.ru`
   ("t молока", "Уровень ЦР-НД (датчик)") silently rewrote the Russian interface. Adding
@@ -551,13 +566,13 @@ will silently send every task start back to a full warm-up.
 
 ## 9. Where to pick up
 
-See `docs/STATUS.md` for the backlog. Short version of where things stand:
+Short version of where things stand:
 
 - Six scenarios calibrated at seed 1; **nine models** measured across all six — four
   Claude (`results/llm.jsonl`), four through the Codex CLI adapter (`llm_gpt-*.jsonl`:
   astra 81.5, sol 68.5, terra 37.5, luna 18.4) and GLM-5.3 through Z.AI
   (`glm-5.3_zai_r1.jsonl`, 64.1). Transcripts for all of them in `results/llm_traces/`;
-  per-model write-ups in `docs/CODEX-*.md` and `docs/GLM-5.3-ZAI.md`. The demo shows the
+  per-model provenance and findings in `docs/MODEL-RUNS.md`. The demo shows the
   same numbers because it computes them with `metrics.bench_score_run` — verified cell by
   cell against the README table.
 - **`results/` also holds sensitivity studies, and they are not participants.** The Terra
@@ -577,9 +592,9 @@ See `docs/STATUS.md` for the backlog. Short version of where things stand:
 - The English task track exists (`--prompt-lang en`, `nh3twin/prompt_en.py`) and is
   measured on one model across all six scenarios (`google/gemini-3.7-flash`: mean 17.8,
   Regulation Gap −23.2, three catastrophes); it is a second, separately labelled column,
-  not a replacement. `results/user/openrouter_en.jsonl` + `traces_en/`.
+  not a replacement. `results/user/runs.jsonl` + `results/user/traces/`.
 
-Open, in rough priority order: the token-budget frontier (§11.6 — the safety-latency
+Open, in rough priority order: the token-budget frontier (the safety-latency
 trade-off is still supported by a single point per model), the expert validation round,
 three seeds for π_random, and English-track runs of the published models (which would
 make the two language columns comparable model by model).

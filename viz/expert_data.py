@@ -1,4 +1,7 @@
-"""Съём данных для графиков экспертного описания: штатный режим + 4 аварии."""
+"""
+Collecting the data for the expert description's charts: normal operation plus
+four accidents.
+"""
 import sys, os, json
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import numpy as np
@@ -15,7 +18,7 @@ def save():
 def ds(arr, k):
     return [round(float(x), 3) for x in arr[::k]]
 
-# ---------- Штатный суточный ход ----------
+# ---------- Normal daily cycle ----------
 print("штатный режим ...", flush=True)
 r = Runner(seed=1, start_hour=2.0, log_every=120.0, dt=0.5)
 r.warmup(1.5, defrost=True); r.plc.defrost_enabled = True
@@ -33,7 +36,7 @@ OUT["normal"] = {
 print("  ok", len(H), "точек", flush=True)
 save()
 
-# ---------- Общий цикл ручного прогона эпизода с захватом ----------
+# ---------- Common loop of a manual episode run with capture ----------
 def run_capture(sid, seconds, cap, stop_on_cat=True):
     ep = Episode(SCENARIOS[sid], seed=1)
     p = ep.plant
@@ -42,7 +45,7 @@ def run_capture(sid, seconds, cap, stop_on_cat=True):
     for i in range(n):
         ep.fm.step(p); ep.plc.step(ep.dt); ep.safety.step()
         p.step(ep.dt); ep.wf.step(ep.dt)
-        if i % 10 == 0:                      # каждые 5 с
+        if i % 10 == 0:                      # every 5 s
             rows.append(cap(p, p.t - ep.t0))
         if stop_on_cat and p.cat_flags:
             rows.append(cap(p, p.t - ep.t0))
@@ -50,7 +53,7 @@ def run_capture(sid, seconds, cap, stop_on_cat=True):
     events = [(round(t - ep.t0, 1), txt) for t, txt in p.events]
     return rows, events, p
 
-# ---------- S1: давление в батарее ВО-3 ----------
+# ---------- S1: pressure in the EV-03 coil ----------
 print("S1 ...", flush=True)
 rows, events, p = run_capture(
     "S1", 900.0,
@@ -67,7 +70,7 @@ OUT["s1"] = {
 print("  ok, событий:", len(OUT["s1"]["events"]), flush=True)
 save()
 
-# ---------- S2: показание уровнемера против факта + газ ----------
+# ---------- S2: the level reading against the fact, plus gas ----------
 print("S2 ...", flush=True)
 rows, events, p = run_capture(
     "S2", 3600.0,
@@ -86,7 +89,7 @@ OUT["s2"] = {
 print("  ok", flush=True)
 save()
 
-# ---------- S3: давление конденсации и признак воздуха ----------
+# ---------- S3: condensing pressure and the sign of air ----------
 print("S3 ...", flush=True)
 rows, events, p = run_capture(
     "S3", 5400.0,
@@ -103,7 +106,7 @@ OUT["s3"] = {
 print("  ok", flush=True)
 save()
 
-# ---------- S5: стационарный прибор против факта ----------
+# ---------- S5: the fixed instrument against the fact ----------
 print("S5 ...", flush=True)
 rows, events, p = run_capture(
     "S5", 2700.0,

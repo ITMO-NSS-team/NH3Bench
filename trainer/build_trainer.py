@@ -1,12 +1,14 @@
 # -*- coding: utf-8 -*-
 """
-Сборка тренажёра эксперта в один HTML. Физика — та же, через Pyodide.
+Building the expert trainer into a single HTML file. The physics is the
+same, through Pyodide.
 
     py trainer/build_trainer.py
 
-Свои прогоны можно показать в том же интерфейсе, не трогая опубликованную
-матрицу: путь к файлу результатов и к каталогу протоколов передаются
-аргументами, а собранный файл кладётся куда скажут.
+Runs of your own can be shown in the same interface without touching
+the published matrix: the path to the results file and to the transcript
+directory are passed as arguments, and the built file goes wherever you
+say.
 
     py trainer/build_trainer.py \\
        --llm results/llm.jsonl results/llm_myrun.jsonl \\
@@ -20,7 +22,7 @@ sys.path.insert(0, ROOT)
 sys.path.insert(0, os.path.join(ROOT, "trainer"))
 import driver as DRV
 
-# -------- полезная нагрузка: исходники + таблица свойств --------
+# -------- payload: the sources plus the property table --------
 SRC_FILES = ["__init__.py", "props.py", "config.py", "plant.py", "piping.py",
              "dispersion.py", "control.py", "faults.py", "actions.py",
              "episode.py", "scenarios.py", "metrics.py", "prompt_en.py",
@@ -32,9 +34,10 @@ for f in SRC_FILES:
 FILES["driver.py"] = base64.b64encode(
     open(os.path.join(ROOT, "trainer", "driver.py"), "rb").read()).decode()
 
-# Снимки задач на момент приёма смены. Без них каждый запуск и каждое
-# «смотреть заново» стоят полного прогрева установки -- десятки секунд в
-# браузере. Если снимков нет, драйвер считает прогрев, как раньше.
+# Task snapshots at the moment the shift is accepted. Without them every start
+# and every "watch again" costs a full warm-up of the plant -- tens of seconds
+# in a browser. If there are no snapshots, the driver computes the warm-up as
+# before.
 import make_snapshots as MS                                        # noqa: E402
 
 SNAPS = MS.as_files()
@@ -57,11 +60,11 @@ I18N_JS_SRC = open(os.path.join(ROOT, "trainer", "i18n.js"),
 CATALOG = DRV.catalog_json()
 SCENARIOS = DRV.scenarios_json()
 
-# Данные о существующих прогонах. Собираются сканированием results/, а не
-# вписываются руками: набор сценариев не закрыт, и появление новой строки в
-# таблице не должно быть работой программиста. Протоколы кладутся без поля
-# obs -- наблюдение заново порождает сам двойник при воспроизведении, и это
-# сокращает полезную нагрузку с 6.4 до 1.3 МБ.
+# Data about the existing runs. It is gathered by scanning results/ rather than
+# typed in by hand: the scenario set is not closed, and a new row in the table
+# must not be a programmer's job. The transcripts are stored without the obs
+# field -- the twin regenerates the observation itself on replay, and that cuts
+# the payload from 6.4 to 1.3 MB.
 import demo_manifest as DM                                          # noqa: E402
 
 _ap = argparse.ArgumentParser(add_help=True)
@@ -1360,9 +1363,9 @@ HTML = r"""<!DOCTYPE html>
 </body></html>"""
 
 worker = WORKER_JS.replace("@@FILES@@", json.dumps(FILES))
-# Данные прогонов -- отдельным объявлением перед бандлом. Так trainer/*.js
-# остаются разбираемым JavaScript: метка внутри выражения делала watch.js
-# синтаксически неверным, и редактор ругался на весь файл.
+# The run data goes in a declaration of its own before the bundle. That keeps
+# trainer/*.js parseable JavaScript: a placeholder inside an expression made
+# watch.js syntactically invalid and an editor complained about the whole file.
 DATA_JS = (
     "const NH3_MANIFEST = "
     + json.dumps(dict(MANIFEST, label=ARGS.label), ensure_ascii=False)

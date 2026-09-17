@@ -17,15 +17,6 @@ results/llm_summary.json
 *.bak
 results/metrics_summary.json
 
-# LaTeX build artifacts and the AAAI author kit (download from https://aaai.org/authorkit27/)
-paper/*.aux
-paper/*.bbl
-paper/*.blg
-paper/*.log
-paper/*.pdf
-!paper/aaai27_demo.pdf
-paper/aaai2027.sty
-paper/aaai2027.bst
 
 .env
 .env.*

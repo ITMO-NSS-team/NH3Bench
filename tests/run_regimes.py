@@ -1,7 +1,7 @@
 """
-Прогон цифрового двойника во всех характерных режимах.
+Running the digital twin in every characteristic regime.
 
-Запуск:  python3 tests/run_regimes.py
+Usage:  python3 tests/run_regimes.py
 """
 
 import sys, os, time

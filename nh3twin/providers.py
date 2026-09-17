@@ -1,25 +1,28 @@
 # -*- coding: utf-8 -*-
 """
-Подключение произвольной модели к циклу эпизода.
+Connecting an arbitrary model to the episode loop.
 
-Бенчмарк изначально умел только Claude Code в неинтерактивном режиме, и
-опубликованные 24 прогона получены именно им. Чтобы бенчмарк мог измерить
-чужую модель, нужен второй транспорт -- но так, чтобы первый остался
-побайтно тем же: `llm_policy.py` здесь не меняется, а переиспользуется.
+The benchmark originally spoke only to Claude Code in non-interactive
+mode, and the first published runs were made with it. For the benchmark
+to measure somebody else's model, a second transport is needed -- but in
+such a way that the first stays byte for byte the same: `llm_policy.py`
+is not modified here, it is reused.
 
-Что общего у всех транспортов и потому НЕ переопределяется:
+What every transport has in common and therefore does NOT override:
 
-    * системная часть промпта (роль + каталог 133 действий);
-    * пользовательская часть (вводная, наблюдение, история);
-    * разбор ответа (`parse_action`) и снятие статистики;
-    * формат пошагового протокола.
+    * the system part of the prompt (role plus the catalog of 133
+      actions);
+    * the user part (briefing, observation, history);
+    * the answer parsing (`parse_action`) and the statistics;
+    * the format of the per-decision transcript.
 
-Различается только вызов модели и способ узнать, сколько токенов она
-израсходовала на размышление. Второе важнее первого: виртуальное время
-считается ИЗ ТОКЕНОВ, а не из реальной задержки сети, поэтому провайдер,
-который не сообщает скрытые рассуждающие токены, отдаёт своей модели фору --
-она приезжает к аварии раньше, чем думала в действительности. Режим учёта
-поэтому записывается в результат и обязан попадать в таблицу рядом с баллом.
+Only the model call differs, and the way of learning how many tokens the
+model spent on deliberation. The second matters more than the first:
+virtual time is computed FROM TOKENS and not from the real network
+latency, so a provider that does not report hidden reasoning tokens
+gives its model a head start -- it arrives at the accident earlier than
+it actually thought. The accounting mode is therefore written into the
+result and must appear in the table next to the score.
 """
 
 from __future__ import annotations
@@ -34,26 +37,26 @@ from .llm_policy import (ClaudeCLIPolicy, CodexCLIPolicy, ZAIChatPolicy,
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
-# Режимы учёта токенов размышления. Пишутся в результат прогона; строка
-# таблицы без этого признака несопоставима с остальными по времени.
-ACC_OUTPUT = "output_tokens"                  # Anthropic: включает скрытые
-ACC_COMPLETION = "completion_tokens"          # OpenAI-совместимые, reasoning внутри
-ACC_COMPLETION_PLUS = "completion+reasoning"  # reasoning пришёл отдельной суммой
-ACC_NO_REASONING = "completion_tokens_only"   # скрытое размышление не сообщено
+# Modes of accounting for deliberation tokens. They are written into the run
+# result; a table row without this field is not comparable with the others on
+# time.
+ACC_OUTPUT = "output_tokens"                  # Anthropic: includes the hidden ones
+ACC_COMPLETION = "completion_tokens"          # OpenAI-compatible, reasoning included
+ACC_COMPLETION_PLUS = "completion+reasoning"  # reasoning arrived as a separate figure
+ACC_NO_REASONING = "completion_tokens_only"   # hidden deliberation not reported
 
 
 # =========================================================================
-# Локальные ключи
+# Local keys
 # =========================================================================
 
 def load_dotenv(path=".env") -> dict:
     """
-    Чтение .env без внешней зависимости.
+    Reading .env without an external dependency.
 
-    Ключи провайдеров не должны попадать ни в репозиторий, ни в командную
-    строку (она видна в списке процессов и в истории оболочки), поэтому
-    единственный поддерживаемый способ их передать -- файл или переменная
-    среды.
+    Provider keys must reach neither the repository nor the command line
+    (which is visible in the process list and in the shell history), so the
+    only supported way to pass them is a file or an environment variable.
     """
     out = {}
     if not os.path.exists(path):
@@ -76,20 +79,22 @@ def load_dotenv(path=".env") -> dict:
 
 class OpenRouterPolicy(ClaudeCLIPolicy):
     """
-    Модель через OpenRouter (совместимый с OpenAI формат ответа).
+    A model through OpenRouter (OpenAI-compatible response format).
 
-    Наследование здесь -- не утверждение «это разновидность CLI-политики», а
-    способ иметь единственную копию разбора ответа, статистики и протокола:
-    `act` и `_trace` в `llm_policy.py` от транспорта не зависят, а править тот
-    файл нельзя -- им получены опубликованные прогоны.
+    The inheritance here is not a claim that "this is a kind of CLI policy"
+    but a way to keep a single copy of the answer parsing, the statistics
+    and the transcript: `act` and `_trace` in `llm_policy.py` do not depend
+    on the transport, and that file must not be edited -- the published runs
+    were made with it.
     """
 
     def __init__(self, model, api_key=None, base_url=OPENROUTER_URL,
                  history=14, timeout=240, retries=2, trace_path=None,
                  label=None, verbose=False, temperature=None,
                  max_tokens=None, extra_body=None, prompt_lang="ru"):
-        # Родительский конструктор не вызывается: он готовит файл системного
-        # промпта для CLI, а здесь системная часть идёт в теле запроса.
+        # The parent constructor is not called: it prepares the system-prompt
+        # file for the CLI, while here the system part goes in the request
+        # body.
         self.prompt_lang = prompt_lang
         self.verbose = verbose
         self.model = model
@@ -106,8 +111,9 @@ class OpenRouterPolicy(ClaudeCLIPolicy):
         self.max_tokens = max_tokens
         self.extra_body = extra_body or {}
         self._system = system_prompt(prompt_lang)
-        # Режим учёта выясняется по первому же ответу и далее только
-        # уточняется: заявлять его заранее нельзя, он зависит от провайдера.
+        # The accounting mode is determined from the very first response and
+        # only refined afterwards: it cannot be declared in advance, it depends
+        # on the provider.
         self.token_accounting = None
 
         self.api_key = api_key or os.environ.get("OPENROUTER_API_KEY", "")
@@ -119,35 +125,36 @@ class OpenRouterPolicy(ClaudeCLIPolicy):
                 "нет ключа OpenRouter: положите OPENROUTER_API_KEY в .env "
                 "или в переменную среды")
 
-    # -- учёт токенов -----------------------------------------------------
+    # -- token accounting -----------------------------------------------
 
     def _deliberation_tokens(self, usage: dict) -> tuple:
         """
-        (токены размышления, режим учёта).
+        (deliberation tokens, accounting mode).
 
-        Считается всё, что модель породила: и видимый ответ, и скрытое
-        рассуждение. Установка не различает «думал вслух» и «думал молча».
+        Everything the model produced is counted: both the visible answer and
+        the hidden reasoning. The plant makes no distinction between "thought
+        out loud" and "thought silently".
         """
         comp = int(usage.get("completion_tokens") or 0)
         det = usage.get("completion_tokens_details") or {}
         reas = int(det.get("reasoning_tokens")
                    or usage.get("reasoning_tokens") or 0)
         if not reas:
-            # Скрытого размышления либо не было, либо о нём не сообщили.
-            # Различить эти случаи по одному ответу невозможно, поэтому режим
-            # помечается как неполный -- честнее, чем молча считать, что
-            # модель не думала.
+            # Either there was no hidden reasoning, or it was not reported.
+            # These cases cannot be told apart from a single response, so the
+            # mode is marked as incomplete -- more honest than silently
+            # assuming the model did not think.
             return comp, ACC_NO_REASONING
         if comp > reas:
-            # Обычный для OpenAI-совместимых случай: reasoning уже внутри.
+            # The usual OpenAI-compatible case: reasoning is already included.
             return comp, ACC_COMPLETION
-        # reasoning сообщён отдельной суммой -- складываем.
+        # reasoning was reported as a separate figure -- we add it.
         return comp + reas, ACC_COMPLETION_PLUS
 
-    # -- вызов модели -----------------------------------------------------
+    # -- calling the model ----------------------------------------------
 
     def _call(self, prompt: str) -> tuple:
-        """Возвращает (текст, токены размышления, стоимость, ошибка)."""
+        """Returns (text, deliberation tokens, cost, error)."""
         import requests
 
         body = {
@@ -156,8 +163,8 @@ class OpenRouterPolicy(ClaudeCLIPolicy):
                 {"role": "system", "content": self._system},
                 {"role": "user", "content": prompt},
             ],
-            # Стоимость нужна для метрики цены прогона, а не для оценки
-            # качества: OpenRouter сообщает её в том же ответе.
+            # The cost is needed for the run-cost metric, not for judging
+            # quality: OpenRouter reports it in the same response.
             "usage": {"include": True},
         }
         if self.temperature is not None:
@@ -172,15 +179,15 @@ class OpenRouterPolicy(ClaudeCLIPolicy):
                 headers={
                     "Authorization": f"Bearer {self.api_key}",
                     "Content-Type": "application/json",
-                    # OpenRouter просит идентифицировать приложение; на учёт
-                    # токенов это не влияет.
+                    # OpenRouter asks the application to identify itself; this
+                    # does not affect token accounting.
                     "HTTP-Referer": "https://github.com/nicl-nno/nh3bench",
                     "X-Title": "NH3Bench",
                 },
                 data=json.dumps(body).encode("utf-8"),
                 timeout=self.timeout,
             )
-        except Exception as e:                      # сеть, DNS, таймаут
+        except Exception as e:                      # network, DNS, timeout
             return "", 0, 0.0, f"{type(e).__name__}: {str(e)[:160]}"
 
         if r.status_code != 200:
@@ -197,14 +204,15 @@ class OpenRouterPolicy(ClaudeCLIPolicy):
             return "", 0, 0.0, f"нет choices: {str(j)[:200]}"
         msg = choices[0].get("message") or {}
         text = msg.get("content") or ""
-        # Некоторые модели отдают рассуждение отдельным полем. В текст ответа
-        # оно не входит, но оплачено временем -- и должно быть видно в
-        # протоколе, иначе Inspect покажет решение без его обоснования.
+        # Some models return their reasoning in a separate field. It is not
+        # part of the answer text, but it was paid for in time -- and it has to
+        # be visible in the transcript, or Inspect would show a decision
+        # without its justification.
         think = msg.get("reasoning") or ""
         if think:
-            # Пометки разделов ставим мы, а не модель, поэтому они идут на
-            # языке задания: в англоязычном треке протокол не должен быть
-            # полурусским. Текст самой модели не трогается.
+            # The section markers are ours, not the model's, so they follow the
+            # task language: in the English track a transcript must not be half
+            # Russian. The model's own text is not touched.
             if getattr(self, "prompt_lang", "ru") == "en":
                 head, body = "[reasoning]", "[answer]"
             else:
@@ -216,8 +224,8 @@ class OpenRouterPolicy(ClaudeCLIPolicy):
         if self.token_accounting is None:
             self.token_accounting = mode
         elif self.token_accounting != mode:
-            # Провайдер сменил способ отчётности посреди эпизода: считаем
-            # прогон учтённым по наименее полному режиму.
+            # The provider changed its way of reporting in the middle of an
+            # episode: we count the run under the least complete mode.
             self.token_accounting = ACC_NO_REASONING
 
         cost = 0.0
@@ -227,7 +235,7 @@ class OpenRouterPolicy(ClaudeCLIPolicy):
 
 
 # =========================================================================
-# Фабрика
+# Factory
 # =========================================================================
 
 PROVIDERS = ("claude-cli", "openrouter", "codex", "zai")
@@ -238,11 +246,11 @@ def make_policy(provider, model, *, cli=DEFAULT_CLI, history=14, timeout=240,
                 base_url=None, temperature=None, max_tokens=None,
                 prompt_lang="ru", reasoning_effort="medium"):
     """
-    Политика по имени провайдера.
+    A policy by provider name.
 
-    `claude-cli` -- поведение по умолчанию и та же конфигурация, которой
-    получены опубликованные прогоны: аргументы передаются в точности как
-    раньше, чтобы старую команду можно было повторить дословно.
+    `claude-cli` is the default behaviour and the same configuration the
+    published runs were made with: the arguments are passed exactly as
+    before, so that the old command can be repeated verbatim.
     """
     if provider == "claude-cli":
         return ClaudeCLIPolicy(
@@ -275,10 +283,11 @@ def make_policy(provider, model, *, cli=DEFAULT_CLI, history=14, timeout=240,
 
 
 def accounting_of(policy) -> str:
-    """Режим учёта токенов, как его следует записать в результат прогона."""
+    """The token accounting mode, as it should be written into the run result.
+    """
     return getattr(policy, "token_accounting", None) or ACC_OUTPUT
 
 
 def _sanitize(model: str) -> str:
-    """Имя модели, пригодное для имени файла: слеши в слагах OpenRouter."""
+    """A model name fit for a filename: slashes in OpenRouter slugs."""
     return model.replace("/", "_").replace(":", "_")

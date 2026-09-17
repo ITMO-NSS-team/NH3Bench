@@ -1,9 +1,9 @@
 """
-Прогон эталонных политик по всем сценариям.
+Running the reference policies over every scenario.
 
-Запуск:  python3 tests/run_baselines.py [сценарии] [сиды]
-Результат пишется построчно в results/baselines.jsonl, чтобы прогон можно было
-прервать и продолжить.
+Usage:  python3 tests/run_baselines.py [scenarios] [seeds]
+The result is written line by line into results/baselines.jsonl, so
+that a run can be interrupted and continued.
 """
 
 import sys, os, json, time, argparse, traceback
@@ -55,8 +55,8 @@ def main():
     ap.add_argument("--scenarios", default="S1,S2,S3,S4,S5")
     ap.add_argument("--policies", default="null,random,rules")
     ap.add_argument("--seeds", default="1,2,3,4,5")
-    # Отдельный файл на процесс: параллельный дозапись в один и тот же файл
-    # на Windows иногда рвёт строку посередине.
+    # A separate file per process: appending to the same file in parallel
+    # sometimes tears a line in half on Windows.
     ap.add_argument("--out", default=OUT)
     args = ap.parse_args()
 

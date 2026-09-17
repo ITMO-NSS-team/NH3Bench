@@ -1,16 +1,19 @@
 """
-Во что обошёлся бы прогон при оплате по счётчику (OpenRouter / прямой API).
+What a run would have cost if paid by the meter (OpenRouter / direct
+API).
 
-Прогон, описанный в docs/LLM-BASELINE.md, шёл по подписке через Claude Code,
-и заплаченные за него деньги -- это не цена запросов, а цена запросов ПЛЮС
-собственный системный промпт и описания инструментов Claude Code, которые
-уходили провайдеру при каждом вызове. Здесь считается цена самих запросов.
+The run described in docs/MODEL-RUNS.md went through a subscription
+via Claude Code, and the money paid for it is not the price of the
+requests but the price of the requests PLUS Claude Code's own system
+prompt and tool descriptions, which went to the provider on every call.
+What is computed here is the price of the requests themselves.
 
-Размеры измерены, а не оценены:
-  * выходные токены -- из протоколов прогона (usage.output_tokens);
-  * входные -- восстановлены воспроизведением эпизодов (tests/measure_prompts.py)
-    и переведены в токены настоящим токенизатором Anthropic методом разностей
-    (два вызова с одинаковым хвостом и разной системной частью).
+The sizes are measured, not estimated:
+  * output tokens -- from the run transcripts (usage.output_tokens);
+  * input tokens -- recovered by replaying the episodes
+    (tests/measure_prompts.py) and converted into tokens with the real
+    Anthropic tokenizer by the difference method (two calls with the
+    same tail and a different system part).
 
     python3 tests/cost_estimate.py
 """
@@ -22,15 +25,15 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-# --- цены, $ за миллион токенов (Anthropic = OpenRouter, сквозная) ----------
+# --- prices, $ per million tokens (Anthropic = OpenRouter, end to end) ------
 IN_PER_M = 1.00
 OUT_PER_M = 5.00
-CACHE_WRITE_MULT = 1.25      # запись кэша, TTL 5 минут
-CACHE_READ_MULT = 0.10       # чтение кэша
+CACHE_WRITE_MULT = 1.25      # cache write, TTL 5 minutes
+CACHE_READ_MULT = 0.10       # cache read
 
-# --- измерено (см. заголовок) ------------------------------------------------
-SYS_TOKENS = 5587            # системная часть, 11 449 символов
-USER_CHARS_PER_TOKEN = 1.94  # русский технический текст
+# --- measured (see the header) -----------------------------------------------
+SYS_TOKENS = 5587            # the system part, 11,449 characters
+USER_CHARS_PER_TOKEN = 1.94  # Russian technical text
 
 
 def load_rows():
@@ -71,20 +74,20 @@ def main():
     print(f"{'итого':<7}{tot['calls']:>9}{tot['sys']:>12,}{tot['usr']:>13,}"
           f"{tot['sys'] + tot['usr']:>12,}{tot['out']:>10,}".replace(",", " "))
 
-    # ---------------- стоимость ----------------
+    # ---------------- cost ----------------
     def money(x):
         return f"${x:,.2f}".replace(",", " ")
 
     out_cost = tot["out"] / 1e6 * OUT_PER_M
     usr_cost = tot["usr"] / 1e6 * IN_PER_M
 
-    # без кэша: системная часть оплачивается целиком на каждом вызове
+    # without a cache: the system part is paid for in full on every call
     nocache_in = (tot["sys"] + tot["usr"]) / 1e6 * IN_PER_M
     nocache = nocache_in + out_cost
 
-    # с кэшем: системная часть неизменна побайтно, значит пишется один раз
-    # на процесс и дальше читается. Сценарии шли пятью параллельными
-    # процессами -- считаем пять записей, остальное чтения.
+    # with a cache: the system part is unchanged byte for byte, so it is
+    # written once per process and read afterwards. The scenarios ran as five
+    # parallel processes -- we count five writes and reads for the rest.
     writes = 5
     reads = tot["calls"] - writes
     sys_cached = (writes * SYS_TOKENS * CACHE_WRITE_MULT

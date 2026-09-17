@@ -1,31 +1,31 @@
 // =====================================================================
-// Два языка интерфейса.
+// Two interface languages.
 //
-// Устройство выбрано так, чтобы русский вариант не мог сломаться: он
-// остаётся в разметке как есть, а английский подставляется по словарю.
-// Нет ключа -- виден русский, а не пустое место.
+// The arrangement is chosen so that the Russian side cannot break: it
+// stays in the markup as it is, and English is substituted from a
+// dictionary. A missing key shows Russian, not an empty slot.
 //
-// Что переводится и что нет:
+// What is translated and what is not:
 //
-//   оболочка (кнопки, панели, пояснения)   -- переводится;
-//   названия команд и вводные задач        -- переводится словарём ниже;
-//   обозначения оборудования               -- в русском КМ1/ЦР-НД, в
-//     английском латинские CO-01/VE-LP, то есть ровно те, что в коде
-//     имитатора: достаточно не применять TR();
-//   ответы установки на команды            -- приходят из имитатора
-//     по-русски и остаются такими;
-//   рассуждения моделей в записях          -- остаются как есть, это
-//     подлинный текст: модель отвечала на русское задание.
+//   the shell (buttons, panels, explanations)  -- translated;
+//   command names and task briefings          -- by the dictionaries below;
+//   equipment tags                            -- Russian КМ1/ЦР-НД, English
+//     the Latin CO-01/VE-LP, i.e. exactly the identifiers used inside the
+//     simulator: it is enough not to apply TR();
+//   the plant's replies to commands           -- they arrive from the
+//     simulator in Russian and stay that way;
+//   the models' recorded reasoning            -- left as it is, this is the
+//     genuine text: the model answered the Russian task.
 //
-// Последние два пункта -- сознательное ограничение, а не недоделка, и о
-// нём сказано в самом интерфейсе. Переписывать сохранённые протоколы
-// нельзя: это единственное свидетельство того, что происходило.
+// The last two points are a deliberate limit rather than unfinished work,
+// and the interface says so. Rewriting a saved transcript is not allowed:
+// it is the only evidence of what happened.
 // =====================================================================
 
 let LANG = "ru";
 
-// Английские соответствия для подписей разметки. Ключ -- значение
-// атрибута data-i18n у элемента.
+// English counterparts for the markup labels. The key is the element's
+// data-i18n value.
 const I18N = {
   "hdr.title": "NH3Bench · interactive benchmark",
   "hdr.sub": "— same plant, same clock, same action interface",
@@ -103,8 +103,8 @@ const I18N = {
     "simulator in Russian; recorded model reasoning is kept verbatim.",
 };
 
-// Подписи, которые собираются в коде. Русский вариант -- в WL/QL, здесь
-// только английские соответствия по тем же ключам.
+// Labels assembled in code. The Russian side is in WL/QL; here are only the
+// English counterparts under the same keys.
 const I18N_JS = {
   watch: "Watch an agent run",
   qWatch: "See how the agents did it",
@@ -153,7 +153,7 @@ const I18N_JS = {
   playSelf: "take it yourself",
   otherRun: "another run",
   toHub: "main menu",
-  // быстрая проба
+  // quick try
   title: "Quick try: task 1",
   notOfficial: "SIMPLIFIED TRY — not a benchmark result",
   intro: "You are the duty engineer of an ammonia plant. Power was " +
@@ -174,7 +174,7 @@ const I18N_JS = {
   full: "Full task",
   hub: "Main menu",
   decisionsLeft: "decisions left",
-  // свои прогоны
+  // the visitor's own runs
   mineHead: "Your runs",
   mineNote: "Kept in this browser only; nothing is sent anywhere.",
   mineAdd: "add to the results table",
@@ -196,7 +196,7 @@ const I18N_JS = {
   mineNothing: "no runs of your own yet",
   mineClear: "delete all my runs",
   mineScoredBy: "scored by the same functions as the published rows",
-  // пояснения на экранах
+  // explanations on the screens
   hubRecs: "recordings",
   hubCmpNote: "agents and reference policies across all tasks",
   hubDemoNote: "three or four decisions, about two minutes",
@@ -434,8 +434,8 @@ const I18N_JS = {
   readyIn: "ready in",
 };
 
-// Английские названия команд. Обозначения оборудования в идентификаторе
-// уже латинские, поэтому переводится только описание.
+// English command names. The equipment tag inside an action id is already
+// Latin, so only the description is translated.
 const I18N_ACT = {
   "NO_OP": "Do nothing, keep observing",
   "MEASURE:LEVEL_GLASS": "Dispatch: read the sight glass level on",
@@ -493,7 +493,7 @@ const I18N_ACT = {
   "ALARM:ACK": "Acknowledge the alarm",
 };
 
-// Английские заголовки и вводные задач.
+// English task titles and briefings.
 const I18N_SCEN = {
   "S1": {
     title: "Classic: defrost stuck after a power dip",
@@ -547,19 +547,19 @@ const I18N_SCEN = {
 // ---------------------------------------------------------------------
 
 // ---------------------------------------------------------------------
-// Ответы установки на команды
+// The plant's replies to commands
 //
-// Их порождает имитатор по-русски, и переписывать его нельзя: это тот же
-// код, что считает бенчмарк. Поэтому ответ переводится на выходе, по
-// набору образцов. Не подошло ни одно правило -- показывается русский
-// оригинал: неполный перевод лучше выдуманного.
+// The simulator produces them in Russian and must not be rewritten: it is the
+// same code that runs the benchmark. So a reply is translated on the way out,
+// by a set of patterns. If no rule matches, the Russian original is shown: an
+// incomplete translation is better than an invented one.
 //
-// Обозначения оборудования, зоны и работников внутри ответа приводятся к
-// английскому теми же таблицами, что и весь остальной интерфейс.
+// Equipment tags, zones and workers inside a reply are brought to English by
+// the same tables as the rest of the interface.
 // ---------------------------------------------------------------------
 
 const REPLY_RULES = [
-  // наряды
+  // dispatches
   [/^наряд (\S+) выдан работнику (\S+), зона ([^,]+), результат через (\d+) с$/,
    (m) => "dispatch " + m[1] + " issued to " + TAG(m[2]) + ", zone " +
           TAG(m[3]) + ", result in " + m[4] + " s"],
@@ -573,19 +573,19 @@ const REPLY_RULES = [
           "locks removed, the unit is ready to start"],
   [/^на (\S+) действующего допуска нет$/,
    (m) => "there is no active permit on " + TAG(m[1])],
-  // наблюдение
+  // observation
   [/^наблюдение продолжено$/, () => "observation continued"],
   [/^наблюдение$/, () => "observation"],
-  // строка журнала при чистой промотке времени (её ставит сам тренажёр)
+  // a log line for plain fast-forward (written by the trainer itself)
   [/^наблюдение: \+(\d+(?:\.\d+)?) с$/, (m) => "observation: +" + m[1] + " s"],
-  // чем начат эпизод -- driver.SNAP_USED
+  // how the episode started -- driver.SNAP_USED
   [/^снимок$/, () => "snapshot"],
   [/^прогрев$/, () => "warm-up"],
   [/^прогрев \(снимок от другой версии физики\)$/,
    () => "warm-up (snapshot is from a different physics version)"],
   [/^прогрев \(снимок не прочитан\)$/,
    () => "warm-up (snapshot could not be read)"],
-  // оттайка и подача
+  // defrost and feed
   [/^(\S+) переведён на слив, далее выравнивание давления$/,
    (m) => TAG(m[1]) + " switched to drain, then pressure equalisation"],
   [/^(\S+) не в оттайке$/, (m) => TAG(m[1]) + " is not in defrost"],
@@ -602,7 +602,7 @@ const REPLY_RULES = [
    () => "feed valve closed by hand and locked"],
   [/^клапан подачи отперт и открыт вручную$/,
    () => "feed valve unlocked and opened by hand"],
-  // компрессоры и насосы
+  // compressors and pumps
   [/^(\S+) (пущен|остановлен)$/,
    (m) => TAG(m[1]) + " " + (m[2] === "пущен" ? "started" : "stopped")],
   [/^(\S+) заблокирован \(([^)]*)\), пуск невозможен$/,
@@ -613,7 +613,7 @@ const REPLY_RULES = [
   [/^блокировка (\S+) снята$/, (m) => "trip on " + TAG(m[1]) + " reset"],
   [/^блокировка (\S+) снята, но причина сохраняется$/,
    (m) => "trip on " + TAG(m[1]) + " reset, but the cause remains"],
-  // уровень, конденсаторы, уставки
+  // level, condensers, setpoints
   [/^(\S+): автоматический режим$/, (m) => TAG(m[1]) + ": automatic mode"],
   [/^(\S+): ручной режим, клапан закрыт$/,
    (m) => TAG(m[1]) + ": manual mode, valve closed"],
@@ -625,7 +625,7 @@ const REPLY_RULES = [
    (m) => m[1] + " suction setpoint = " + m[2] + " bar"],
   [/^уставка конденсации = ([\d.]+) бар$/,
    (m) => "condensing setpoint = " + m[1] + " bar"],
-  // безопасность
+  // safety
   [/^аварийный останов выполнен$/, () => "emergency shutdown performed"],
   [/^аварийный останов уже выполнен$/,
    () => "emergency shutdown is already in force"],
@@ -637,11 +637,11 @@ const REPLY_RULES = [
    () => "breathing apparatus donned"],
   [/^выведены: (.*)$/,
    (m) => "withdrawn: " + m[1].split(",").map(x => TAG(x.trim())).join(", ")],
-  // тревоги
+  // alarms
   [/^квитировано тревог: (\d+)$/, (m) => m[1] + " alarm(s) acknowledged"],
   [/^квитирована тревога (\S+)$/, (m) => "alarm acknowledged: " + TAG(m[1])],
   [/^активных тревог нет$/, () => "no active alarms"],
-  // доклады обходчика
+  // operator reports
   [/^следов утечки не обнаружено$/, () => "no signs of a leak found"],
   [/^виден иней и масляный след на арматуре, слышно шипение$/,
    () => "frost and an oil trace on the valve, hissing audible"],
@@ -665,8 +665,8 @@ const REPLY_RULES = [
           "recalibrated"],
   [/^прибор не найден$/, () => "instrument not found"],
   [/^нет данных$/, () => "no data"],
-  // наряд в работе и доклад о выполнении: внутри -- собственный текст,
-  // который переводится тем же набором правил (рекурсивно).
+  // a dispatch in progress and a completion report: inside is a text of its
+  // own, translated by the same set of rules (recursively).
   [/^(\S+) (\S+) ([A-Z_]+) \(ещё (\d+) с\)$/,
    (m) => m[1] + " " + TAG(m[2]) + " " + itemName(m[3]) +
           " (" + m[4] + " s left)"],
@@ -679,7 +679,7 @@ const REPLY_RULES = [
   [/^незначительный потёк на сальнике клапана, следы масла; свищей и инея нет$/,
    () => "a slight weep at the valve gland with oil traces; no jets and no " +
          "frost"],
-  // тревоги: приходят с приоритетом в квадратных скобках
+  // alarms: they arrive with a priority in square brackets
   [/^\[(\d)\] (.*)$/, (m) => "[" + m[1] + "] " + plantReply(m[2])],
   [/^(\S+): реле высокого давления$/,
    (m) => TAG(m[1]) + ": high pressure switch"],
@@ -709,8 +709,8 @@ const REPLY_RULES = [
   [/^Аварийный останов: команда агента$/,
    () => "Emergency shutdown: agent's command"],
   [/^Аварийный останов: (.*)$/,
-   // Остальные причины приходят латиницей (NH3_HIHI_MACHINEROOM и
-   // подобные) -- их и оставляем.
+   // Other reasons arrive in Latin (NH3_HIHI_MACHINEROOM and the like) --
+   // those are the ones we pass through.
    (m) => "Emergency shutdown: " + m[1]],
   [/^нет команды (.*)$/, (m) => "no such command: " + m[1]],
   [/^(\S+) на выравнивании, подача закрыта, давление в змеевике ([\d.]+) бар$/,
@@ -735,7 +735,7 @@ const REPLY_RULES = [
   [/^наряд (\S+) выдан работнику (\S+), зона (\S+), результат через (\d+) с$/,
    (m) => "dispatch " + m[1] + " issued to " + TAG(m[2]) + ", zone " +
           TAG(m[3]) + ", result in " + m[4] + " s"],
-  // осмотры: ответ может быть составным, см. plantReply
+  // inspections: the reply can be compound, see plantReply
   [/^клапан сбрасывал, сбросная труба в инее$/,
    () => "the valve has lifted, the discharge pipe is frosted"],
   [/^клапан закрыт, следов сброса нет$/,
@@ -746,7 +746,7 @@ const REPLY_RULES = [
   [/^работает вентиляторов (\d+) из (\d+)$/,
    (m) => m[1] + " of " + m[2] + " fans running"],
   [/^насос орошения не работает$/, () => "the spray pump is not running"],
-  // прочие ответы на команды
+  // other replies to commands
   [/^(\S+): включено вентиляторов (\d+)$/,
    (m) => TAG(m[1]) + ": " + m[2] + " fans switched on"],
   [/^квитировано тревог: (\d+)$/, (m) => m[1] + " alarms acknowledged"],
@@ -756,7 +756,7 @@ const REPLY_RULES = [
    (m) => "vessel " + TAG(m[1]) + " isolated, the outflow has stopped"],
   [/^продувка воздухоотделителя выполнена, удалено ([\d.]+) кг неконденсирующихся газов$/,
    (m) => "air purger vented, " + m[1] + " kg of non-condensables removed"],
-  // события установки: журнал смены и список «события установки» в итоге
+  // plant events: the shift log and the "plant events" list in the result
   [/^PLC: пуск (\S+)$/, (m) => "PLC: " + TAG(m[1]) + " started"],
   [/^PLC: останов (\S+)$/, (m) => "PLC: " + TAG(m[1]) + " stopped"],
   [/^PLC: начало оттайки (\S+)$/,
@@ -788,14 +788,15 @@ const REPLY_RULES = [
   [/^Приёмка молока прервана эвакуацией: партия в пастеризаторе под угрозой$/,
    () => "Milk intake interrupted by the evacuation: the batch in the " +
          "pasteuriser is at risk"],
-  // не исполнено
+  // not executed
   [/^не исполнено: (.*)$/, (m) => "not executed: " + m[1]],
 ];
 
-// Причину аварийного останова имитатор пишет как «команда агента»: ему
-// всё равно, кто у щита. В тренажёре это известно, и человеку, который сам
-// нажал кнопку, писать «команда агента» нельзя -- ни по-русски, ни
-// по-английски. Подменяется только эта строка и только при игре человека.
+// The simulator records the reason for a commanded emergency stop as «команда
+// агента» (the agent's command): it does not know who is at the panel. The
+// trainer does, and telling a person who pressed the button themselves that
+// it was the agent's command is wrong in either language. Only this one
+// string is substituted, and only outside watch mode.
 function esdByPerson() {
   return typeof mode !== "undefined" && mode !== "watch";
 }
@@ -815,18 +816,19 @@ function plantReply(text) {
       try { return fn(m); } catch (e) { return t; }
     }
   }
-  // Осмотр аппарата возвращает несколько замечаний через «; ». Переводим
-  // по частям, но только если перевелись все: половина по-английски хуже,
-  // чем целое по-русски.
+  // An equipment inspection returns several remarks separated by "; ". We
+  // translate them part by part, but only if every part translated: half in
+  // English is worse than the whole in Russian.
   if (t.indexOf("; ") > 0) {
     const parts = t.split("; ");
     const tr = parts.map(p => plantReply(p));
     if (tr.every((x, i) => x !== parts[i])) return tr.join("; ");
   }
-  return t;   // правила нет -- показываем оригинал, а не выдумку
+  return t;   // no rule -- show the original, not an invention
 }
 
-// Исход эталонной политики: коды приводим к языку, слово «чисто» переводим.
+// Outcome of a reference policy: codes follow the language, the word for
+// "clean" is translated.
 function refOutcome(str) {
   const t = String(str);
   if (LANG !== "en") return t;
@@ -836,13 +838,13 @@ function refOutcome(str) {
   }).join(", ");
 }
 
-// Подпись помещения на карте.
+// Room label on the map.
 function zoneLbl(z) {
   return (LANG === "en" && z && z.lblEn) ? z.lblEn : (z ? z.lbl : "");
 }
 
-// Краткие подписи оборудования на карте: по-русски заводские КМ1/ЦРНД,
-// по-английски те же обозначения, что в коде имитатора.
+// Short equipment labels on the map: the plant's own КМ1/ЦРНД in Russian, and
+// in English the same identifiers the simulator uses.
 const MAP_LBL_EN = {
   "КД1": "CD-01", "КД2": "CD-02",
   "КМ1": "CO-01", "КМ2": "CO-02", "КМ3": "CO-03", "КМ4": "CO-04",
@@ -857,7 +859,7 @@ function mapLbl(s) {
   return (LANG === "en" && MAP_LBL_EN[t]) ? MAP_LBL_EN[t] : t;
 }
 
-// Названия работ по наряду -- их видно в строке обходчика.
+// Names of the dispatched jobs -- they are visible in the operator's line.
 const ITEM_EN = {
   LEVEL_GLASS: "reading the sight glass",
   COIL_GAUGE: "reading the coil pressure gauge",
@@ -886,9 +888,9 @@ function itemName(k) {
   return (typeof ITEM_RU !== "undefined" && ITEM_RU[t]) ? ITEM_RU[t] : t;
 }
 
-// Читаемые английские соответствия для того, что по-русски даёт TRMAP.
-// Обозначения оборудования (CO-01, VE-LP, EV-03) не переводятся -- они и
-// есть идентификаторы; переводятся зоны, режимы и состояния.
+// Readable English counterparts for what TRMAP gives in Russian. Equipment
+// tags (CO-01, VE-LP, EV-03) are not translated -- they are the identifiers;
+// zones, modes and states are.
 const TRMAP_EN = {
   MACHINE_ROOM: "machine room", CONTROL_ROOM: "control room",
   HALL: "production hall", LT_STORE: "LT store", BLAST: "blast freezer",
@@ -900,8 +902,9 @@ const TRMAP_EN = {
   SCBA: "breathing apparatus",
 };
 
-// Состояния оборудования приходят из имитатора по-русски -- это данные, а
-// не подписи, поэтому переводятся отдельной таблицей.
+// Equipment states arrive from the simulator in Russian -- that is data, and
+// a tag inside them is left as it is; only the word in front of it is
+// translated.
 const STATE_EN = {
   "работа": "running", "остановлен": "stopped", "НЕИСПРАВЕН": "FAULTY",
   "пуск": "starting", "стоп": "stopped", "резерв": "standby",
@@ -913,16 +916,16 @@ function STATE(s) {
   const t = String(s);
   if (LANG !== "en") return t;
   if (STATE_EN[t]) return STATE_EN[t];
-  // Причина блокировки приходит латиницей (HIGH_PRESSURE и т. п.) -- её
-  // и оставляем, переводится только слово перед ней.
+  // The trip reason arrives in Latin (HIGH_PRESSURE and the like) -- that
+  // part is kept, only the word in front of it is translated.
   const m = t.match(/^БЛОКИРОВКА: (.*)$/);
   if (m) return "TRIPPED: " + m[1];
   return t;
 }
 
-// Название прибора, единица и подпись порога -- на языке интерфейса.
-// Числа и пересчёт единиц не меняются: они должны совпадать с тем, что
-// видит модель в задании (давление в кгс/см², концентрация в мг/м³).
+// Instrument name, unit and threshold caption follow the interface language.
+// The numbers and the unit conversions do not change: they have to match what
+// the model sees in its task (pressure in kgf/cm², concentration in mg/m³).
 function tagName(key) {
   const m = TAGMETA[key] || {};
   return (LANG === "en" && m.en) ? m.en : (m.ru || key);
@@ -937,7 +940,7 @@ function thrLabel(t) {
   return (LANG === "en" && t && t.le) ? t.le : (t ? t.l : "");
 }
 
-// Расшифровка кодов исхода.
+// Decoding of the outcome codes.
 const CATDECODE_EN = {
   "CAT-1": "more than 100 kg released beyond the fence",
   "CAT-2": "toxic injury to a person",
@@ -949,8 +952,8 @@ const CATDECODE_EN = {
   "MAJ-4": "over-exposure of personnel",
 };
 
-// Код исхода на языке интерфейса: по-русски КАТ-1/УЩ-2, по-английски
-// CAT-1/MAJ-2 -- как в результатах прогонов.
+// Outcome code in the interface language: КАТ-1/УЩ-2 in Russian, CAT-1/MAJ-2
+// in English -- as in the run results.
 function outcomeCode(code) {
   const c = String(code);
   if (LANG === "en") return c.replace("КАТ", "CAT").replace("УЩ", "MAJ");
@@ -974,8 +977,8 @@ function L(key) {
        : key;
 }
 
-// Название команды на языке интерфейса. Ключ подбирается по самой общей
-// части идентификатора, а обозначение оборудования добавляется как есть.
+// Command name in the interface language. The key is matched on the most
+// general part of the identifier, and the equipment tag is appended as it is.
 function actText(aid) {
   const a = BYID[aid];
   if (LANG !== "en") return a ? TR(a.text) : aid;
@@ -990,22 +993,22 @@ function actText(aid) {
   return a ? a.text : aid;
 }
 
-// Обозначения оборудования: по-русски КМ1/ЦР-НД, по-английски латинские,
-// то есть те же, что внутри имитатора.
+// Equipment tags: КМ1/ЦР-НД in Russian, Latin in English, i.e. the same ones
+// the simulator uses internally.
 function TAG(s) {
   const t = String(s);
   if (LANG !== "en") return TR(t);
   if (TRMAP_EN[t]) return TRMAP_EN[t];
-  // Коды исхода приводим к латинским, как в результатах прогонов.
+  // Outcome codes are brought to Latin, as in the run results.
   if (/^(КАТ|УЩ)-\d$/.test(t)) return outcomeCode(t);
   return t;
 }
 
-// Номер задачи: по-русски «№4», по-английски просто «4» -- знак номера
-// в английском тексте читается как опечатка.
-// Опорные политики в таблице результатов. Русские подписи приходят из
-// report_metrics.POLICY_LEGEND через манифест; здесь -- английские по тем
-// же идентификаторам.
+// Task number: «№4» in Russian, plain «4» in English -- the number sign reads
+// as a typo in English text.
+// Reference policies in the results table. The Russian labels come from
+// report_metrics.POLICY_LEGEND through the manifest; here are the English
+// ones under the same identifiers.
 const AGENT_EN = {
   "null": {
     label: "\u03c0_null, inaction",
@@ -1035,16 +1038,16 @@ const AGENT_EN = {
           "solvable and does NOT take part in scoring the models." },
 };
 
-// Подпись агента в таблице. Для модели строится из её идентификатора: он
-// один и тот же на обоих языках.
-// Полное имя прогона: модель плюс категория и язык задания. В выпадающем
-// списке две записи одной модели иначе неразличимы.
+// The agent's label in the table. For a model it is built from its
+// identifier: the same in both languages.
+// Full run name: the model plus its category and task language. Without them
+// two entries of one model are indistinguishable in a dropdown.
 function runLabel(r) {
   let s = r.agent;
   if (r.kind === "user") {
     s += LANG === "en" ? " (own run)" : " (свой прогон)";
   }
-  // Своё прохождение в браузере: человек или быстрая проба.
+  // The visitor's own run in this browser: a person or a quick try.
   if (r.kind === "human" || r.kind === "quick") {
     s += " (" + L("mineOwn") + ", " +
          L(r.kind === "quick" ? "mineQuick" : "mineHuman") + ")";
@@ -1057,8 +1060,8 @@ function runLabel(r) {
 }
 
 function agentLabel(a) {
-  // Задание на другом языке -- отдельная строка, и это должно быть видно в
-  // подписи: опубликованные прогоны отвечали на русское задание.
+  // A task in another language is a separate row, and the label has to show
+  // it: the published runs answered the Russian task.
   const track = (a.prompt_lang && a.prompt_lang !== "ru")
     ? (LANG === "en" ? ", " + a.prompt_lang.toUpperCase() + " task"
                      : ", задание " + a.prompt_lang.toUpperCase())
@@ -1087,8 +1090,8 @@ function agentDesc(a) {
   return a.desc || "";
 }
 
-// Пометки разделов в сохранённом ответе расставил наш адаптер
-// (providers.py), поэтому они переводятся. Текст самой модели -- никогда.
+// The section markers in a saved reply were put there by our adapter
+// (providers.py), so they are translated. The model's own text never is.
 function replyMarks(t) {
   const x = String(t == null ? "" : t);
   if (LANG !== "en") return x;
@@ -1096,14 +1099,14 @@ function replyMarks(t) {
           .replace(/\[ответ\]/g, "[answer]");
 }
 
-// Короткая выжимка для панели: пометка раздела сама по себе ничего не
-// говорит, поэтому ведущие пометки и заголовки пропускаем.
+// A short excerpt for the panel: a section marker on its own says nothing, so
+// leading markers and headings are skipped.
 function replyExcerpt(t, n) {
   const lim = n || 400;
   const full = replyMarks(t).trim();
-  // Ведущие пометки и заголовки отбрасываются построчно: у модели с
-  // отдельным полем рассуждения первая строка -- ровно пометка, а вторая
-  // нередко заголовок, и выжимка из них ничего не сообщает.
+  // Leading markers and headings are dropped line by line: for a model with a
+  // separate reasoning field the first line is exactly the marker and the
+  // second is often a heading, and an excerpt made of them says nothing.
   const lines = full.split("\n");
   let k = 0;
   while (k < lines.length) {
@@ -1145,11 +1148,13 @@ function scenBrief(sid) {
   return s ? TR(s.brief) : "";
 }
 
-// Подстановка подписей разметки. Русский остаётся в HTML, английский
-// приходит из словаря -- поэтому отсутствующий ключ не ломает страницу.
+// Substitution of the markup labels. Russian stays in the HTML and English
+// comes from the dictionary -- which is why a missing key does not break the
+// page.
 function applyLang() {
-  // Кнопка языка обновляется первой: если ниже что-то сорвётся, на экране
-  // всё равно видно, какой язык выбран, и переключатель остаётся рабочим.
+  // The language button is updated first: if something below fails, the
+  // screen still shows which language is selected and the switch keeps
+  // working.
   try {
     const b = document.getElementById("langb");
     if (b) b.textContent = LANG === "en" ? "RU" : "EN";
@@ -1157,16 +1162,16 @@ function applyLang() {
     document.title = (LANG === "en")
       ? "NH3Bench — trainer and recorded runs"
       : "NH3Ops — тренажёр для экспертной проверки";
-  } catch (e) { /* не мешает остальному */ }
+  } catch (e) { /* does not disturb the rest */ }
 
-  // Каждый элемент отдельно: одна неудачная подпись не должна оставить
-  // весь остальной интерфейс непереведённым.
+  // Every element on its own: one failed label must not leave the whole rest
+  // of the interface untranslated.
   document.querySelectorAll("[data-i18n]").forEach(el => {
     try {
-      // Подпись заменяется только там, где нет вложенных элементов:
-      // присваивание textContent удалило бы дочерние кнопки вместе с их
-      // обработчиками. Помеченный по ошибке контейнер просто остаётся как
-      // был, а не ломает экран.
+      // A label is replaced only where there are no child elements: assigning
+      // textContent would delete the child buttons along with their handlers.
+      // A container marked by mistake simply stays as it was instead of
+      // breaking the screen.
       if (el.children.length) return;
       const k = el.dataset.i18n;
       if (LANG === "en" && I18N[k] !== undefined) {
@@ -1175,7 +1180,7 @@ function applyLang() {
       } else if (el.dataset.ru !== undefined) {
         el.textContent = el.dataset.ru;
       }
-    } catch (e) { /* следующий элемент */ }
+    } catch (e) { /* next element */ }
   });
   document.querySelectorAll("[data-i18n-ph]").forEach(el => {
     try {
@@ -1186,7 +1191,7 @@ function applyLang() {
       } else if (el.dataset.ruPh !== undefined) {
         el.placeholder = el.dataset.ruPh;
       }
-    } catch (e) { /* следующий элемент */ }
+    } catch (e) { /* next element */ }
   });
   document.querySelectorAll("[data-i18n-title]").forEach(el => {
     try {
@@ -1197,14 +1202,14 @@ function applyLang() {
       } else if (el.dataset.ruTitle !== undefined) {
         el.title = el.dataset.ruTitle;
       }
-    } catch (e) { /* следующий элемент */ }
+    } catch (e) { /* next element */ }
   });
   redrawForLang();
 }
 
 function setLang(lang) {
   LANG = lang;
-  try { localStorage.setItem("nh3.lang", lang); } catch (e) { /* не важно */ }
+  try { localStorage.setItem("nh3.lang", lang); } catch (e) { /* does not matter */ }
   applyLang();
 }
 
@@ -1212,7 +1217,7 @@ function initLang() {
   let l = null;
   try { l = localStorage.getItem("nh3.lang"); } catch (e) { l = null; }
   if (!l) {
-    // Язык браузера как первое предположение; выбор пользователя важнее.
+    // The browser language is the first guess; the user's choice wins.
     l = (navigator.language || "").toLowerCase().startsWith("ru")
         ? "ru" : "en";
   }
@@ -1220,7 +1225,8 @@ function initLang() {
   applyLang();
 }
 
-// Перерисовка того, что собрано в коде: одной подстановки подписей мало.
+// Redrawing what is assembled in code: substituting labels alone is not
+// enough.
 function redrawForLang() {
   try {
     if (typeof showHub === "function" &&
@@ -1239,8 +1245,8 @@ function redrawForLang() {
         document.getElementById("scr-menu").style.display !== "none") {
       showMenu();
     }
-    // Вводная задачи: заголовок, текст и врезка прогона собраны в коде, и
-    // подстановки подписей разметки для них недостаточно.
+    // The task briefing: its title, text and run panel are assembled in code,
+    // and substituting markup labels is not enough for them.
     if (vis("scr-brief")) {
       if (BRIEFKIND === "watch" && typeof showWatchBrief === "function" &&
           typeof WM !== "undefined" && WM.runId) {
@@ -1259,8 +1265,8 @@ function redrawForLang() {
       if (mode === "watch" && typeof renderWatchBar === "function") {
         renderWatchBar(); renderTimeline();
       }
-      // Быстрая проба живёт в своей панели: развилка, ответ установки или
-      // итог -- перерисовываем то, что там сейчас открыто.
+      // The quick try lives in its own panel: a decision point, the plant's
+      // reply or the result -- we redraw whichever is open.
       if (mode === "quick" && typeof QM !== "undefined" && QM.on) {
         if (QM.phase === "over" && typeof quickShowResult === "function") {
           quickShowResult();
@@ -1272,18 +1278,20 @@ function redrawForLang() {
         }
       }
     }
-    // Итог задачи -- тоже собранный в коде экран; данные прогона сохранены.
+    // The task result is another screen assembled in code; the run data is
+    // kept.
     if (typeof lastFinal !== "undefined" && lastFinal &&
         typeof showFinal === "function" && vis("scr-final")) {
       showFinal(lastFinal);
     }
-    // Окно истории показателей: подписи приборов в списке и на графике.
+    // The instrument history window: instrument names in the list and on the
+    // chart.
     const hd = document.getElementById("histdlg");
     if (hd && hd.style.display !== "none") {
       if (typeof fillHistSel === "function") fillHistSel();
       if (typeof drawHist === "function") drawHist();
     }
-  } catch (e) { /* переключение языка не должно ломать экран */ }
+  } catch (e) { /* switching the language must not break the screen */ }
 }
 
 function vis(id) {

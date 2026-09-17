@@ -9,11 +9,10 @@
 | `trainer/build_trainer.py` | 835 | assembles the browser trainer HTML |
 | `trainer/pix.js` | 833 | pixel-art plant visualization |
 | `nh3twin/actions.py` | 653 | action catalog + workforce |
-| `viz/build_html.py` | 583 | ISA-101 HMI generator |
 | `nh3twin/control.py` | 519 | PLC, alarms, safety system |
 | `viz/expert_doc_text.py` | 499 | Russian text of the expert document |
 | `viz/build_expert_doc.py` | 459 | expert document assembly + SVG schematics |
-| `nh3twin/policies.py` | 358 | five reference policies |
+| `nh3twin/policies.py` | 358 | six reference policies |
 | `nh3twin/faults.py` | 336 | fault injection library |
 | `nh3twin/scenarios.py` | 295 | five benchmark scenarios |
 | `nh3twin/episode.py` | 289 | observation + episode loop |
@@ -106,7 +105,7 @@ compressor), never scenario-specific ones.
 
 ## Presentation layer
 
-**`viz/`** — `build_html.py` produces an ISA-101 mnemonic HMI; `expert_data.py` →
+**`viz/`** — `expert_data.py` →
 `expert_figs.py` → `build_expert_doc.py` produce the Russian expert validation document
 (9 sections, 11 figures: 5 inline SVG schematics + 6 matplotlib charts from real runs,
 plus a Д/У/Н review sheet).

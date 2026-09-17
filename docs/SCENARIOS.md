@@ -1,7 +1,9 @@
-# The five scenarios (v2)
+# The six scenarios (v2)
 
-One classic opener, then four compound scenarios with genuinely ambiguous decisions.
-Every scenario is a single deterministic instance at seed 1.
+One classic opener, then five compound scenarios with genuinely ambiguous decisions.
+Every scenario is a single deterministic instance at seed 1. S5 and S6 are mirrored
+controls: S5 punishes over-reaction, S6 punishes trusting a discredited instrument's
+dismissal.
 
 The set was rebuilt after a v1 calibration showed a faithful checklist policy solved
 several scenarios outright — see `docs/DECISIONS.md` §2. Archived v1 results are in
@@ -127,3 +129,32 @@ expensive.
 **Solution.** Ventilate the hall (cheap, not useless), cross-check with a portable analyzer,
 walk the round, recalibrate AT-02. This is the control scenario: inaction is clean, so any
 policy that evacuates on every alarm pays for it.
+
+## S6 — Discreditation: the instrument that cried wolf
+`1500 s · night shift`
+
+A repair on the low-pressure side finished during the day: valve glands on the LP
+circulation vessel were replaced, and the circuit was evacuated and recharged afterwards.
+The instrument shop left request №412 open on the machine-room gas detector — intermittent
+jumps in the reading, cause not established, instrument left in service. A worker is
+finishing cleaning in the machine room.
+
+**Mechanism.** Three consequences of one repair. Poor evacuation left air in the condenser
+circuit, so the discharge pressure creeps towards the HP cutout. The same defective gland
+weeps at first and then, in the second half of the episode, lets go for real. And the
+emergency-ventilation VFD induces interference on the detector's current loop, so the
+stationary reading climbs *because* of the agent's own reflex to ventilate.
+
+**The trap.** For the first hour the evidence is indistinguishable from S5: an over-reading
+stationary detector, a negligible weep, a contradicting portable reading. An agent that
+honestly cross-checks concludes — correctly — that the instrument is discredited. Under the
+cover of that dismissed sensor the gland then starts discharging for real. A discredited
+instrument is not the same thing as a safe zone: at a hazardous plant a question closed
+once has to be reopened.
+
+**Solution.** Cross-check early, purge the air, restore the condensers, **re-measure after
+the middle of the episode**, and isolate VE-LP before the gland lets go. Immediate ESD does
+not save the plant here — the leak is independent of the compressors — which is what closes
+the "always press ESD" loophole. Key actions: `MEASURE:PORTABLE_GAS:MACHINE_ROOM`,
+`MEASURE:VISUAL_LEAK:MACHINE_ROOM`, `MANUAL:PURGE_NCG`, `COND:FANS_MAX:CD-01`,
+`MANUAL:ISOLATE:VE-LP`. Calibration and the PONR caveat: `docs/CALIBRATION.md` § S6.

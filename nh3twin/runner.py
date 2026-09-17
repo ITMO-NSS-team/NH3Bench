@@ -1,12 +1,14 @@
 """
-Раннер прогона: единая точка сборки двойника, автоматики, защит и отказов.
+Episode runner: the single place where the twin, the PLC, the safety
+layer and the fault injection are wired together.
 
-Фиксированный порядок вычислений внутри шага гарантирует детерминизм:
-    1. Инжекция отказов
-    2. ПЛК
-    3. ПАЗ
-    4. Интегрирование двойника
-    5. Запись истории
+The order of computation inside one step is fixed, which is what makes
+a run deterministic:
+    1. fault injection
+    2. PLC
+    3. safety system (ESD)
+    4. twin integration
+    5. history recording
 """
 
 from __future__ import annotations
@@ -62,7 +64,7 @@ class Runner:
         return self.fm.add(f)
 
     def warmup(self, hours: float = 1.0, defrost: bool = False):
-        """Прогрев до установившегося режима без отказов и без записи истории."""
+        """Warm up to steady state: no faults, no history recorded."""
         saved = self.plc.defrost_enabled
         self.plc.defrost_enabled = defrost
         n = int(hours * 3600 / self.dt)

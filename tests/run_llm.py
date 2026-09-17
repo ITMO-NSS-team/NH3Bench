@@ -1,5 +1,5 @@
 """
-Прогон языковой модели по сценариям бенчмарка.
+Running a language model over the benchmark scenarios.
 
     # Claude Code (saved subscription session)
     python3 tests/run_llm.py --scenarios S1,S2,S3,S4,S5,S6 --model haiku
@@ -8,13 +8,15 @@
     python3 tests/run_llm.py --provider codex --model gpt-5.6-luna \
         --reasoning-effort medium --scenarios S1,S2,S3,S4,S5,S6
 
-Результат построчно дописывается в results/llm.jsonl (кэш по ключу
-сценарий/политика/сид, как у эталонных политик), пошаговый протокол с
-полными репликами модели -- в results/llm_traces/.
+The result is appended line by line to results/llm.jsonl (cached by
+the scenario/policy/seed key, as for the reference policies), and the
+per-decision transcript with the model's full replies goes to
+results/llm_traces/.
 
-Прогон долгий: каждое решение -- отдельный вызов модели, 3-25 с реального
-времени, а решений за эпизод бывает под сотню. Запускать в фоне и следить по
-логу; при обрыве повторный запуск досчитает недостающие клетки.
+A run is long: every decision is a separate model call, 3-25 s of real
+time, and there can be close to a hundred decisions per episode. Run it
+in the background and follow the log; after an interruption, starting
+again fills in the missing cells.
 """
 
 import argparse
@@ -52,7 +54,7 @@ def already_done(out_path):
 
 
 def _commit() -> str:
-    """Версия бенчмарка на момент прогона."""
+    """The benchmark version at the time of the run."""
     try:
         import subprocess
         r = subprocess.run(["git", "-C", ROOT, "rev-parse", "--short", "HEAD"],
@@ -66,8 +68,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--scenarios", default="S1,S2,S3,S4,S5,S6")
     ap.add_argument("--model", default="haiku")
-    # Провайдер по умолчанию -- тот, которым получены опубликованные прогоны:
-    # прежняя команда должна воспроизводиться дословно.
+    # The default provider is the one the published runs were made with: the
+    # earlier command has to reproduce verbatim.
     ap.add_argument("--provider", default="claude-cli", choices=PROVIDERS)
     ap.add_argument("--base-url", default="",
                     help="переопределить адрес API провайдера")
@@ -82,11 +84,12 @@ def main():
     ap.add_argument("--cli", default="")
     ap.add_argument("--tag", default="", help="суффикс имени политики")
     ap.add_argument("--out", default=os.path.join(OUT_DIR, "llm.jsonl"))
-    # Пробные прогоны не должны смешиваться с опубликованными протоколами:
-    # tests/replay_llm.py собирает их по маске и дописал бы пробу в матрицу.
+    # Trial runs must not mix with the published transcripts:
+    # tests/replay_llm.py collects them by mask and would append a trial to the
+    # matrix.
     ap.add_argument("--trace-dir", default=TRACE_DIR)
-    # Канонический язык задания -- русский: на него отвечали опубликованные
-    # прогоны. Английский трек помечается в паспорте и сравнивается отдельно.
+    # The canonical task language is Russian: the published runs answered it.
+    # The English track is marked in the provenance and compared separately.
     ap.add_argument("--prompt-lang", default="ru", choices=("ru", "en"))
     args = ap.parse_args()
 
@@ -101,9 +104,9 @@ def main():
             if (sid, pol_name, seed) in done:
                 print(f"== {sid}/{pol_name}/{seed} уже есть", flush=True)
                 continue
-            # Слаги OpenRouter содержат косую черту (google/gemini-3.7-flash),
-            # поэтому имя файла протокола обезвреживается отдельно, иначе путь
-            # уехал бы в несуществующий подкаталог.
+            # OpenRouter slugs contain a slash (google/gemini-3.7-flash), so
+            # the transcript filename is sanitized separately, or the path
+            # would go off into a non-existent subdirectory.
             os.makedirs(args.trace_dir, exist_ok=True)
             trace = os.path.join(
                 args.trace_dir, f"{_sanitize(pol_name)}_{sid}_s{seed}.jsonl")
@@ -148,10 +151,11 @@ def main():
                     if args.provider in {"codex", "zai"} else None)
                 r["llm"]["tokens_per_decision"] = (
                     round(pol.stats.out_tokens / max(pol.stats.calls, 1), 1))
-                # Паспорт прогона. Без него строку таблицы невозможно
-                # воспроизвести и нельзя понять, сопоставима ли она с
-                # остальными по времени: виртуальные секунды считаются из
-                # токенов, и способ их учёта -- часть условий испытания.
+                # The provenance of a run. Without it a table row cannot be
+                # reproduced and there is no way to tell whether it is
+                # comparable with the others on time: virtual seconds are
+                # computed from tokens, and the way they are accounted for is
+                # part of the test conditions.
                 r["llm"].update(provider=args.provider,
                                 token_accounting=accounting_of(pol),
                                 prompt_lang=args.prompt_lang,

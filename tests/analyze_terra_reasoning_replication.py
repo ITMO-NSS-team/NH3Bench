@@ -2,7 +2,7 @@
 
 The experimental unit is a complete six-scenario benchmark run.  Scenario rows
 are never pooled as independent replicates.  The analysis follows the plan in
-docs/CODEX-TERRA-REASONING-REPLICATION-PLAN.md.
+docs/MODEL-RUNS.md (sensitivity studies).
 """
 
 from __future__ import annotations

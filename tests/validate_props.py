@@ -1,15 +1,17 @@
 # -*- coding: utf-8 -*-
 """
-Валидация V1 (docs/VALIDATION.md): свойства nh3twin/props.py против CoolProp.
+Validation V1 (docs/VALIDATION.md): the properties of
+nh3twin/props.py against CoolProp.
 
-CoolProp реализует уравнение состояния Tillner-Roth & Baehr для аммиака —
-это независимая физическая модель; двойник видит только таблицу на 400 узлах.
-Проверяется интерполяция МИМО узлов, линеаризация перегретого пара и
-изоэнтропное сжатие.
+CoolProp implements the Tillner-Roth & Baehr equation of state for
+ammonia -- an independent physical model; the twin sees only a table of
+400 nodes. What is checked is the interpolation BETWEEN nodes, the
+linearization of superheated vapour and isentropic compression.
 
-Запуск:  python tests/validate_props.py
-Итог:    results/validation/props.json + таблица в stdout.
-Требует CoolProp (нужен только для валидации и перестройки таблицы).
+Usage:  python tests/validate_props.py
+Result: results/validation/props.json plus a table in stdout.
+Requires CoolProp (needed only for validation and for rebuilding the
+table).
 """
 
 import sys, os, json
@@ -28,8 +30,10 @@ FLUID = "Ammonia"
 
 
 def rel(a, b, scale=None):
-    """Относительная погрешность; scale задаёт знаменатель для величин,
-    проходящих через ноль (энтальпии считаем в долях h_fg)."""
+    """
+    Relative error; scale sets the denominator for quantities that pass
+    through zero (enthalpies are counted in fractions of h_fg).
+    """
     d = np.abs(np.asarray(a) - np.asarray(b))
     s = np.abs(np.asarray(scale if scale is not None else b))
     return d / np.maximum(s, 1e-12)
@@ -38,7 +42,7 @@ def rel(a, b, scale=None):
 def main():
     report = {}
 
-    # -- 1. Насыщение: 2000 давлений мимо узлов сетки --------------------
+    # -- 1. Saturation: 2000 pressures away from the grid nodes ----------
     P = np.geomspace(pr.P_MIN * 1.02, pr.P_MAX * 0.98, 2000)
     hfg_ref = np.array([CP.PropsSI("H", "P", p, "Q", 1, FLUID)
                         - CP.PropsSI("H", "P", p, "Q", 0, FLUID) for p in P])
@@ -68,7 +72,7 @@ def main():
         print(f"{name:8}{100 * e.max():10.4f}{100 * e.mean():10.4f}")
     report["saturation"] = sat
 
-    # -- 2. Перегретый пар: линеаризация по cp против CoolProp -----------
+    # -- 2. Superheated vapour: cp linearization against CoolProp ---------
     print("\nПерегрев (h_vap / rho_vap / s_vap), погрешность %:")
     sh_rows = []
     for P1 in (0.72e5, 2.0e5, 5.0e5, 12.0e5):
@@ -89,7 +93,7 @@ def main():
           f"s {worst['s_pct']:.2f} %")
     report["superheat"] = sh_rows
 
-    # -- 3. Изоэнтропное сжатие: рабочие скачки давления -----------------
+    # -- 3. Isentropic compression: the working pressure ratios ----------
     print("\nИзоэнтропное сжатие, погрешность Δh, %:")
     is_rows = []
     for P1, P2 in ((0.72e5, 3.0e5), (2.0e5, 11.0e5), (3.0e5, 14.0e5)):
@@ -104,10 +108,10 @@ def main():
         print(f"  {P1/1e5:5.2f} → {P2/1e5:5.2f} бар: {100 * e:6.2f}")
     report["isentropic"] = is_rows
 
-    # -- 4. Скорость волны для гидроудара: K из уравнения состояния ------
-    # Исторически wave_speed брала K = 1.03 ГПа — изотермический модуль
-    # (K_T при −10 °C). Волна сжатия адиабатична: K_s = rho*a². После
-    # исправления модель обязана совпадать с NIST с точностью интерполяции.
+    # -- 4. Wave speed for hydraulic shock: K from the equation of state --
+    # Historically wave_speed took K = 1.03 GPa -- the isothermal modulus (K_T
+    # at -10 °C). A compression wave is adiabatic: K_s = rho*a^2. After the fix
+    # the model must match NIST to interpolation accuracy.
     from nh3twin.piping import wave_speed
     print("\nСкорость волны (D=150 мм, стенка 5.5 мм), м/с:")
     print(f"{'T,°C':>6}{'a_NIST':>9}{'K_s,ГПа':>9}{'a_твин':>9}"
@@ -129,15 +133,16 @@ def main():
     report["wave_speed"] = ws_rows
     ok_ws = all(abs(r["ratio"] - 1.0) < 0.005 for r in ws_rows)
 
-    # -- 5. Обратная согласованность Psat(Tsat(P)) -----------------------
+    # -- 5. Reverse consistency of Psat(Tsat(P)) -------------------------
     e_inv = rel(np.array([pr.Psat(float(pr.Tsat(p))) for p in P[::20]]), P[::20])
     report["inverse_roundtrip"] = {"max_pct": float(100 * e_inv.max())}
     print(f"\nPsat(Tsat(P)) кругорейс: max {100 * e_inv.max():.4f} %")
 
-    # -- Вердикты по критериям приёмки из docs/VALIDATION.md -------------
+    # -- Verdicts against the acceptance criteria in docs/VALIDATION.md ---
     ok_sat = all(c["max_pct"] < 0.05 for c in sat.values())
-    # Заявка после доработки модели (см. README twin): h и s < 1.6 % во всём
-    # диапазоне до 80 К; плотность со степенной поправкой n(P) < 3 %.
+    # The claim after the model was reworked (see the twin README): h and s
+    # below 1.6 % over the whole range up to 80 K; density with the power
+    # correction n(P) below 3 %.
     ok_sh = all(r["h_pct"] < 1.6 and r["s_pct"] < 1.6 and r["rho_pct"] < 3.0
                 for r in sh_rows)
     ok_is = all(r["dh_pct"] < 2.0 for r in is_rows)

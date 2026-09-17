@@ -1,13 +1,13 @@
 """
-Конфигурация референсной аммиачной холодильной установки молокозавода.
+Configuration of the reference ammonia refrigeration plant of a dairy.
 
-Типоразмеры подобраны под завод 250 т молока/сут:
-  - охлаждение молока после пастеризации через ледяную воду (HACCP-критично)
-  - камера хранения готовой продукции +2 C
-  - низкотемпературный склад -20 C
-  - скороморозильный аппарат -30 C
+The sizes are chosen for a plant of 250 t of milk per day:
+  - cooling milk after pasteurization through ice water (HACCP-critical)
+  - finished-product store at +2 C
+  - low-temperature store at -20 C
+  - blast freezer at -30 C
 
-Двухступенчатая насосно-циркуляционная схема, R717, заправка ~3200 кг.
+Two-stage pumped-circulation layout, R717, charge about 3200 kg.
 """
 
 from __future__ import annotations
@@ -16,126 +16,126 @@ from typing import Literal
 
 
 # =========================================================================
-# Компрессоры
+# Compressors
 # =========================================================================
 
 @dataclass
 class CompressorCfg:
     tag: str
-    stage: Literal["LP", "HP"]          # бустер / верхняя ступень
-    V_disp: float                        # м3/об (объём, описываемый за оборот)
-    n_nom: float = 2950.0                # об/мин
+    stage: Literal["LP", "HP"]          # booster / high stage
+    V_disp: float                        # m3/rev (swept volume per revolution)
+    n_nom: float = 2950.0                # rpm
     n_min: float = 1480.0
     n_max: float = 3550.0
-    slide_min: float = 0.25              # мин. положение золотника
-    slide_rate: float = 0.06             # 1/с, скорость перемещения золотника
+    slide_min: float = 0.25              # minimum slide-valve position
+    slide_rate: float = 0.06             # 1/s, slide-valve travel rate
     eta_v_coef: tuple = (0.960, -0.0165, -0.00090)   # a0 + a1*PI + a2*PI^2
     eta_is_coef: tuple = (0.520, 0.1150, -0.01250)   # b0 + b1*PI + b2*PI^2
-    oil_charge: float = 180.0            # кг масла в маслоотделителе
-    oil_T_nom: float = 318.15            # К, номинальная температура масла
-    C_oil: float = 1900.0                # Дж/(кг*К)
-    oil_ratio: float = 4.5               # кратность впрыска масла (кг масла / кг NH3)
-    UA_oil_cooler: float = 9000.0        # Вт/К, маслоохладитель
-    T_dis_trip: float = 373.15           # К (100 C), защита по температуре нагнетания
-    P_dis_trip: float = 16.5e5           # Па, реле высокого давления
-    P_suc_trip: float = 0.45e5           # Па, реле низкого давления
-    liquid_slug_limit: float = 0.15      # массовая доля жидкости на всасе
-    liquid_slug_time: float = 10.0       # с до разрушения
+    oil_charge: float = 180.0            # kg of oil in the separator
+    oil_T_nom: float = 318.15            # K, nominal oil temperature
+    C_oil: float = 1900.0                # J/(kg*K)
+    oil_ratio: float = 4.5               # oil injection ratio (kg of oil per kg of NH3)
+    UA_oil_cooler: float = 9000.0        # W/K, oil cooler
+    T_dis_trip: float = 373.15           # K (100 C), discharge temperature protection
+    P_dis_trip: float = 16.5e5           # Pa, high-pressure cutout
+    P_suc_trip: float = 0.45e5           # Pa, low-pressure cutout
+    liquid_slug_limit: float = 0.15      # liquid mass fraction at the suction
+    liquid_slug_time: float = 10.0       # s to destruction
 
 
 # =========================================================================
-# Сосуды
+# Vessels
 # =========================================================================
 
 @dataclass
 class VesselCfg:
     tag: str
-    V: float                             # м3, полный геометрический объём
-    L_nom: float = 0.45                  # номинальный уровень (доля объёма)
-    L_hi: float = 0.75                   # тревога высокого уровня
-    L_hihi: float = 0.90                 # унос жидкости на всас
+    V: float                             # m3, total geometric volume
+    L_nom: float = 0.45                  # nominal level (fraction of volume)
+    L_hi: float = 0.75                   # high-level alarm
+    L_hihi: float = 0.90                 # liquid carry-over to the suction
     L_lo: float = 0.20
-    L_lolo: float = 0.08                 # кавитация насосов
-    P_design: float = 19.0e5             # Па, расчётное давление
-    P_prv: float = 17.5e5                # Па, уставка предохранительного клапана
-    prv_capacity: float = 2.2            # кг/с при полном открытии
-    UA_amb: float = 45.0                 # Вт/К, теплоприток через изоляцию
+    L_lolo: float = 0.08                 # pump cavitation
+    P_design: float = 19.0e5             # Pa, design pressure
+    P_prv: float = 17.5e5                # Pa, relief valve setting
+    prv_capacity: float = 2.2            # kg/s at full opening
+    UA_amb: float = 45.0                 # W/K, heat ingress through insulation
 
 
 # =========================================================================
-# Испарители (воздухоохладители)
+# Evaporators (air coolers)
 # =========================================================================
 
 @dataclass
 class EvaporatorCfg:
     tag: str
     room: str
-    source: str                          # тег питающего сосуда
-    Q_nom: float                         # Вт, номинальная холодопроизводительность
-    UA_dry: float                        # Вт/К, коэффициент при чистом теплообменнике
-    V_coil: float                        # м3, внутренний объём змеевика
-    m_metal: float                       # кг, масса металла
-    c_metal: float = 480.0               # Дж/(кг*К), сталь
-    n_circ: float = 3.0                  # кратность циркуляции (насосная схема)
-    frost_UA_k: float = 0.55             # доля падения UA при предельном инее
-    frost_max: float = 45.0              # кг, предельная масса инея
-    frost_rate_k: float = 2.2e-8         # кг/(с*Вт), интенсивность образования инея
-    defrost_hotgas: float = 0.28         # кг/с, расход горячего пара на оттайку
-    defrost_needed: bool = True          # нужна ли оттайка (для НТ-камер)
-    # Гидравлика для расчёта гидроудара
-    pipe_D: float = 0.150                # м, диаметр коллектора всасывания
-    pipe_L: float = 42.0                 # м, длина участка до общего коллектора
-    pipe_wall: float = 0.0055            # м, толщина стенки
-    pipe_sigma_y: float = 235e6          # Па, предел текучести стали 09Г2С
-    Cv_feed: float = 0.0                 # заполняется автоматически из Q_nom
+    source: str                          # tag of the feeding vessel
+    Q_nom: float                         # W, nominal cooling capacity
+    UA_dry: float                        # W/K, coefficient for a clean heat exchanger
+    V_coil: float                        # m3, internal coil volume
+    m_metal: float                       # kg, mass of metal
+    c_metal: float = 480.0               # J/(kg*K), steel
+    n_circ: float = 3.0                  # circulation ratio (pumped layout)
+    frost_UA_k: float = 0.55             # fraction of UA lost at maximum frost
+    frost_max: float = 45.0              # kg, maximum frost mass
+    frost_rate_k: float = 2.2e-8         # kg/(s*W), frost formation rate
+    defrost_hotgas: float = 0.28         # kg/s of hot gas for defrost
+    defrost_needed: bool = True          # whether defrost is needed (for the LT rooms)
+    # Hydraulics for the hydraulic-shock computation
+    pipe_D: float = 0.150                # m, suction header diameter
+    pipe_L: float = 42.0                 # m, length of the run to the common header
+    pipe_wall: float = 0.0055            # m, wall thickness
+    pipe_sigma_y: float = 235e6          # Pa, yield strength of 09G2S steel
+    Cv_feed: float = 0.0                 # filled in automatically from Q_nom
 
 
 # =========================================================================
-# Помещения и тепловая нагрузка
+# Rooms and thermal load
 # =========================================================================
 
 @dataclass
 class RoomCfg:
     tag: str
-    V: float                             # м3
-    T_set: float                         # К, уставка
-    T_alarm_hi: float                    # К, граница HACCP
-    UA_env: float                        # Вт/К, ограждающие конструкции
-    C_air: float                         # Дж/К, теплоёмкость воздуха
-    C_product: float                     # Дж/К, теплоёмкость продукта
-    UA_product: float                    # Вт/К, воздух <-> продукт
-    Q_internal: float = 0.0              # Вт, освещение, вентиляторы, люди
-    door_load: float = 0.0               # Вт при открытых воротах
-    product_mass: float = 0.0            # кг
+    V: float                             # m3
+    T_set: float                         # K, setpoint
+    T_alarm_hi: float                    # K, HACCP limit
+    UA_env: float                        # W/K, building envelope
+    C_air: float                         # J/K, heat capacity of the air
+    C_product: float                     # J/K, heat capacity of the product
+    UA_product: float                    # W/K, air <-> product
+    Q_internal: float = 0.0              # W, lighting, fans, people
+    door_load: float = 0.0               # W with the doors open
+    product_mass: float = 0.0            # kg
 
 
 # =========================================================================
-# Конденсаторы
+# Condensers
 # =========================================================================
 
 @dataclass
 class CondenserCfg:
     tag: str
-    UA_nom: float                        # Вт/К относительно температуры мокрого термометра
+    UA_nom: float                        # W/K against the wet-bulb temperature
     n_fans: int = 2
-    fan_power: float = 7500.0            # Вт на вентилятор
-    pump_power: float = 2200.0           # Вт, циркуляционный насос орошения
-    V: float = 1.8                       # м3, внутренний объём
+    fan_power: float = 7500.0            # W per fan
+    pump_power: float = 2200.0           # W, spray circulation pump
+    V: float = 1.8                       # m3, internal volume
 
 
 # =========================================================================
-# Машинный зал и рассеивание
+# Machine room and dispersion
 # =========================================================================
 
 @dataclass
 class MachineRoomCfg:
-    V: float = 1450.0                    # м3
-    vent_normal: float = 2.4             # м3/с, штатная вентиляция
-    vent_emergency: float = 14.0         # м3/с, аварийная вентиляция
-    detector_setpoint_lo: float = 25.0   # ppm, предупредительная
-    detector_setpoint_hi: float = 100.0  # ppm, аварийная
-    detector_setpoint_hihi: float = 300.0  # ppm, IDLH, аварийный останов
-    detector_lag: float = 12.0           # с, постоянная времени газоанализатора
+    V: float = 1450.0                    # m3
+    vent_normal: float = 2.4             # m3/s, normal ventilation
+    vent_emergency: float = 14.0         # m3/s, emergency ventilation
+    detector_setpoint_lo: float = 25.0   # ppm, warning
+    detector_setpoint_hi: float = 100.0  # ppm, alarm
+    detector_setpoint_hihi: float = 300.0  # ppm, IDLH, emergency shutdown
+    detector_lag: float = 12.0           # s, gas detector time constant
 
 
 @dataclass
@@ -148,20 +148,22 @@ class ProductionHallCfg:
 
 @dataclass
 class SiteCfg:
-    """Площадка: для оценки заграничной концентрации по факельной модели."""
-    fence_distance: float = 160.0        # м до границы площадки
-    release_height: float = 9.0          # м, высота кровли машзала
-    stability_class: str = "D"           # класс устойчивости атмосферы Пасквилла
+    """
+    The site: for estimating the fenceline concentration with the plume model.
+    """
+    fence_distance: float = 160.0        # m to the site boundary
+    release_height: float = 9.0          # m, machine room roof height
+    stability_class: str = "D"           # Pasquill atmospheric stability class
 
 
 # =========================================================================
-# Сборка
+# Assembly
 # =========================================================================
 
 @dataclass
 class PlantConfig:
     name: str = "dairy_250t_v1"
-    charge_total: float = 4170.0         # кг аммиака в системе (проверено аудитом)
+    charge_total: float = 4170.0         # kg of ammonia in the system (checked by audit)
 
     compressors: list = field(default_factory=lambda: [
         CompressorCfg("CO-01", "LP", V_disp=0.00600),
@@ -173,7 +175,7 @@ class PlantConfig:
     vessels: list = field(default_factory=lambda: [
         VesselCfg("VE-LP", V=3.0,  P_design=19.0e5, P_prv=17.5e5),   # -40 C
         VesselCfg("VE-IP", V=3.5,  P_design=19.0e5, P_prv=17.5e5),   # -10 C
-        VesselCfg("VE-HP", V=5.0, P_design=25.0e5, P_prv=19.0e5),   # линейный ресивер
+        VesselCfg("VE-HP", V=5.0, P_design=25.0e5, P_prv=19.0e5),   # liquid receiver
     ])
 
     condensers: list = field(default_factory=lambda: [
@@ -182,20 +184,20 @@ class PlantConfig:
     ])
 
     evaporators: list = field(default_factory=lambda: [
-        # Ледяная вода: питается от VE-IP, оттайка не нужна (плюсовая температура)
+        # Ice water: fed from VE-IP, no defrost needed (above-zero temperature)
         EvaporatorCfg("EV-01", room="ICE",   source="VE-IP", Q_nom=620e3,
                       UA_dry=88000.0, V_coil=1.10, m_metal=2400.0,
                       defrost_needed=False, pipe_D=0.200, pipe_L=28.0),
-        # Камера готовой продукции +2 C
+        # Finished-product store at +2 C
         EvaporatorCfg("EV-02", room="CHILL", source="VE-IP", Q_nom=145e3,
                       UA_dry=19500.0, V_coil=0.36, m_metal=760.0,
                       defrost_needed=False, pipe_D=0.125, pipe_L=35.0),
-        # НТ-склад -20 C, две секции
+        # LT store at -20 C, two sections
         EvaporatorCfg("EV-03", room="LT", source="VE-LP", Q_nom=98e3,
                       UA_dry=11800.0, V_coil=0.30, m_metal=680.0),
         EvaporatorCfg("EV-04", room="LT", source="VE-LP", Q_nom=98e3,
                       UA_dry=11800.0, V_coil=0.30, m_metal=680.0),
-        # Скороморозильный аппарат -30 C, две секции
+        # Blast freezer at -30 C, two sections
         EvaporatorCfg("EV-05", room="BLAST", source="VE-LP", Q_nom=155e3,
                       UA_dry=14200.0, V_coil=0.34, m_metal=820.0),
         EvaporatorCfg("EV-06", room="BLAST", source="VE-LP", Q_nom=155e3,
@@ -221,39 +223,39 @@ class PlantConfig:
     hall: ProductionHallCfg = field(default_factory=ProductionHallCfg)
     site: SiteCfg = field(default_factory=SiteCfg)
 
-    # --- Контур ледяной воды ---------------------------------------------
-    ice_bank_mass_nom: float = 62000.0   # кг воды в аккумуляторе льда
-    ice_max: float = 34000.0             # кг намораживаемого льда
-    ice_water_T_set: float = 274.65      # К (+1.5 C), уставка ледяной воды
-    ice_water_T_alarm: float = 277.15    # К (+4 C), выше -- срыв охлаждения молока
+    # --- Ice water circuit ------------------------------------------------
+    ice_bank_mass_nom: float = 62000.0   # kg of water in the ice bank
+    ice_max: float = 34000.0             # kg of ice built up
+    ice_water_T_set: float = 274.65      # K (+1.5 C), ice water setpoint
+    ice_water_T_alarm: float = 277.15    # K (+4 C), above this milk cooling fails
 
-    # --- Молоко ------------------------------------------------------------
-    milk_tank_mass: float = 45000.0      # кг в танке промежуточного хранения
-    milk_T_set: float = 277.15           # К (+4 C)
-    milk_T_haccp: float = 279.15         # К (+6 C), граница HACCP
-    milk_c: float = 3930.0               # Дж/(кг*К)
-    milk_inlet_T: float = 348.15         # К (+75 C) после пастеризации
-    milk_flow_peak: float = 4.2          # кг/с в пике приёмки
+    # --- Milk ---------------------------------------------------------------
+    milk_tank_mass: float = 45000.0      # kg in the intermediate storage tank
+    milk_T_set: float = 277.15           # K (+4 C)
+    milk_T_haccp: float = 279.15         # K (+6 C), HACCP limit
+    milk_c: float = 3930.0               # J/(kg*K)
+    milk_inlet_T: float = 348.15         # K (+75 C) after pasteurization
+    milk_flow_peak: float = 4.2          # kg/s at peak reception
 
-    # --- Уставки автоматики ------------------------------------------------
-    P_suc_LP_set: float = 0.72e5         # Па, соответствует -40 C
-    P_suc_IP_set: float = 2.91e5         # Па, соответствует -10 C
-    P_cond_set: float = 11.5e5           # Па, плавающее давление конденсации
-    P_cond_min: float = 8.0e5            # Па, минимум для работы ТРВ и оттайки
-    oil_dP_min: float = 1.5e5            # Па, минимальный перепад на масляном насосе
-    Cv_LV_IP: float = 6.0e-5             # пропускная способность клапана HP->IP
-    Cv_LV_LP: float = 4.5e-5             # пропускная способность клапана IP->LP
+    # --- Control setpoints -------------------------------------------------
+    P_suc_LP_set: float = 0.72e5         # Pa, corresponds to -40 C
+    P_suc_IP_set: float = 2.91e5         # Pa, corresponds to -10 C
+    P_cond_set: float = 11.5e5           # Pa, floating condensing pressure
+    P_cond_min: float = 8.0e5            # Pa, minimum for the expansion valve and defrost to work
+    oil_dP_min: float = 1.5e5            # Pa, minimum differential across the oil pump
+    Cv_LV_IP: float = 6.0e-5             # capacity of the HP->IP valve
+    Cv_LV_LP: float = 4.5e-5             # capacity of the IP->LP valve
 
-    # --- Насосы аммиака ------------------------------------------------------
-    pump_flow_LP: float = 3.6            # кг/с на насос
-    pump_flow_IP: float = 9.5            # кг/с на насос
-    pump_power: float = 5500.0           # Вт
-    pump_head: float = 3.0e5             # Па, напор аммиачного насоса
+    # --- Ammonia pumps -------------------------------------------------------
+    pump_flow_LP: float = 3.6            # kg/s per pump
+    pump_flow_IP: float = 9.5            # kg/s per pump
+    pump_power: float = 5500.0           # W
+    pump_head: float = 3.0e5             # Pa, ammonia pump head
 
-    # --- Трубопроводы --------------------------------------------------------
-    suction_header_D: float = 0.300      # м, общий коллектор всасывания НД
-    suction_header_L: float = 68.0       # м
-    suction_header_wall: float = 0.0071  # м
+    # --- Pipework ------------------------------------------------------------
+    suction_header_D: float = 0.300      # m, common LP suction header
+    suction_header_L: float = 68.0       # m
+    suction_header_wall: float = 0.0071  # m
     suction_header_sigma_y: float = 235e6
 
     def by_tag(self, tag: str):

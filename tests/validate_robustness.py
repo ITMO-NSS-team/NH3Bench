@@ -1,22 +1,25 @@
 # -*- coding: utf-8 -*-
 """
-Валидация V6 (docs/VALIDATION.md): устойчивость знаков калибровочной матрицы
-к погрешности модели.
+Validation V6 (docs/VALIDATION.md): robustness of the signs of the
+calibration matrix against model error.
 
-Двойнику не требуется быть точным «в точку»; требуется, чтобы вердикты
-бенчмарка не зависели от того, что коэффициент теплопередачи или понижающий
-коэффициент прочности известны с точностью ±20 %. Скрипт разыгрывает K
-«возмущённых миров» (лог-равномерное масштабирование неопределённых параметров
-конфигурации, один множитель на параметр — систематическая ошибка модели, а не
-разброс изготовления), перепрогоняет калибровочные политики и проверяет,
-сохраняются ли знаки допуска сценария относительно невозмущённого мира 0.
+The twin is not required to be accurate "to the point"; what is
+required is that the benchmark's verdicts do not depend on a heat
+transfer coefficient or a strength derating factor being known to
+within ±20 %. The script plays out K "perturbed worlds"
+(log-uniform scaling of the uncertain configuration parameters, one
+multiplier per parameter -- a systematic model error rather than
+manufacturing spread), re-runs the calibration policies and checks
+whether the signs of a scenario's admission are preserved relative to
+the unperturbed world 0.
 
-Запуск (пилот, ~30 мин):
+Usage (pilot, about 30 min):
   python tests/validate_robustness.py --scenarios S1,S4 \
          --policies null,oracle,regulation --draws 6
 
-Пишет построчно в results/validation/robustness.jsonl (кэш по ключу
-сценарий/политика/мир) — прерванный прогон досчитывается повторным запуском.
+It writes line by line into results/validation/robustness.jsonl
+(cached by the scenario/policy/world key) -- an interrupted run is
+completed by starting it again.
 """
 
 import sys, os, json, time, argparse, traceback
@@ -46,9 +49,10 @@ def make_policy(name, seed):
 
 
 # ---------------------------------------------------------------------------
-# Возмущаемые параметры: (имя, диапазон множителя, применение к config.DEFAULT)
-# Диапазоны обоснованы в docs/VALIDATION.md §V6. Множитель один на параметр —
-# он изображает ошибку МОДЕЛИ, общую для однотипного оборудования.
+# Perturbed parameters: (name, multiplier range, application to
+# config.DEFAULT). The ranges are justified in docs/VALIDATION.md §V6. One
+# multiplier per parameter -- it represents a MODEL error, common to equipment
+# of one type.
 # ---------------------------------------------------------------------------
 
 def _scale_evap(attr):
@@ -89,13 +93,14 @@ PERTURB = [
     ("UA_env",         0.80, 1.25, _scale_room("UA_env")),
     ("eta_v_a0",       0.95, 1.05, _scale_comp_a0("eta_v_coef")),
     ("eta_is_a0",      0.95, 1.05, _scale_comp_a0("eta_is_coef")),
-    # dynamic_derate применяется к сегментам уже построенного Plant — см. run_one
+    # dynamic_derate is applied to the segments of an already built Plant --
+    # see run_one
     ("dynamic_derate", 0.75, 1.25, None),
 ]
 
 
 def snapshot(cfg):
-    """Точные исходные значения всех возмущаемых атрибутов."""
+    """The exact original values of every perturbed attribute."""
     snap = []
     for objs, attrs in ((cfg.evaporators, ("UA_dry", "defrost_hotgas",
                                            "frost_rate_k")),
@@ -114,8 +119,11 @@ def restore(snap):
 
 
 def draw_factors(world):
-    """Мир 0 — без возмущений (эталон знаков). Дальше — детерминированно от
-    номера мира, лог-равномерно в диапазоне параметра."""
+    """
+    World 0 -- no perturbations (the reference for the signs). Beyond that,
+    deterministically from the world number, log-uniform over the
+    parameter's range.
+    """
     if world == 0:
         return {name: 1.0 for name, *_ in PERTURB}
     rng = np.random.default_rng(1000 + world)
@@ -131,9 +139,9 @@ def run_one(sid, pol_name, world, seed=1):
             if apply is not None:
                 apply(config.DEFAULT, factors[name])
         ep = Episode(SCENARIOS[sid], seed=seed)
-        # прочность при ударе — на сегментах уже построенной установки;
-        # возмущение после прогрева корректно: параметр влияет только в
-        # момент удара
+        # impact strength -- on the segments of an already built plant;
+        # perturbing it after the warm-up is correct: the parameter matters
+        # only at the moment of the shock
         for seg in ep.plant.segments.values():
             seg.dynamic_derate *= factors["dynamic_derate"]
         r = ep.run(make_policy(pol_name, seed))

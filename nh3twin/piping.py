@@ -1,23 +1,25 @@
 """
-Гидроудар и целостность трубопровода.
+Hydraulic shock and pipe integrity.
 
-Механизм, который моделируется, -- НЕ классический гидроудар от закрытия
-задвижки, а конденсационный удар (condensation-induced water hammer), именно он
-разрушил трубопровод на Millard Refrigerated Services в 2010 г.
+The mechanism modelled here is NOT the classical water hammer from
+closing a valve but condensation-induced water hammer -- that is what
+destroyed the pipework at Millard Refrigerated Services in 2010.
 
-Цепочка:
-  1. Змеевик испарителя находится в оттайке: заполнен горячим паром 8...11 бар,
-     металл прогрет до +20...+30 C.
-  2. Открывается клапан подачи жидкости, в змеевик поступает аммиак -40 C.
-  3. Холодная жидкость вызывает лавинную конденсацию пара.
-  4. Паровой объём схлопывается, образуется зона пониженного давления.
-  5. Столб жидкости разгоняется, заполняя пустоту, и тормозится о тупик/отвод.
-  6. Скачок давления по Жуковскому: dP = rho * a * dv.
+The chain:
+  1. An evaporator coil is in defrost: filled with hot gas at 8...11
+     bar, the metal warmed to +20...+30 C.
+  2. The liquid feed valve opens and -40 C ammonia enters the coil.
+  3. The cold liquid causes runaway condensation of the vapour.
+  4. The vapour volume collapses and a low-pressure void appears.
+  5. The liquid column accelerates into the void and is stopped by a
+     dead end or a bend.
+  6. Joukowsky pressure surge: dP = rho * a * dv.
 
-Волновые процессы имеют характерное время миллисекунды, поэтому они НЕ
-интегрируются вместе с медленной тепловой динамикой (dt = 0.25...0.5 с), а
-рассчитываются алгебраически как событие внутри шага. Это осознанное разделение
-на два временных масштаба -- см. раздел "Численная схема" в README.
+Wave processes have a characteristic time of milliseconds, so they are
+NOT integrated together with the slow thermal dynamics (dt = 0.25...0.5
+s) but computed algebraically as an event inside a step. This split into
+two time scales is deliberate -- see the "Numerical scheme" section of
+the README.
 """
 
 from __future__ import annotations
@@ -26,21 +28,21 @@ from dataclasses import dataclass, field
 from . import props as pr
 
 
-# Скорость волны в стальной трубе с жидким аммиаком (формула Кортевега):
-# a = sqrt(K/rho) / sqrt(1 + (K*D)/(E*e)), E = 2.1e11 Па.
-# K -- АДИАБАТИЧЕСКИЙ модуль упругости K_s = rho*a_звука², берётся из
-# уравнения состояния через props.K_liq(P): 1.6...2.2 ГПа в рабочем
-# диапазоне. Прежняя константа 1.03 ГПа была изотермическим модулем
-# (совпадает с K_T при -10 C) и занижала rho*a на 16...37 % -- найдено
-# валидацией против CoolProp (docs/VALIDATION.md, V1). K теперь передаётся
-# явно, чтобы изотермическое значение не вернулось по умолчанию.
+# Wave speed in a steel pipe with liquid ammonia (the Korteweg formula): a =
+# sqrt(K/rho) / sqrt(1 + (K*D)/(E*e)), E = 2.1e11 Pa. K is the ADIABATIC bulk
+# modulus K_s = rho*a_sound^2, taken from the equation of state through
+# props.K_liq(P): 1.6...2.2 GPa over the working range. The previous constant
+# of 1.03 GPa was the isothermal modulus (it coincides with K_T at -10 C) and
+# underestimated rho*a by 16...37 % -- found by validation against CoolProp
+# (docs/VALIDATION.md, V1). K is now passed explicitly so that the isothermal
+# value cannot come back as a default.
 def wave_speed(D: float, wall: float, rho: float,
                K: float, E: float = 2.1e11) -> float:
     return (K / rho) ** 0.5 / (1.0 + (K * D) / (E * wall)) ** 0.5
 
 
 def hoop_stress(P: float, D: float, wall: float) -> float:
-    """Кольцевое напряжение по формуле Барлоу (тонкостенная труба)."""
+    """Hoop stress by Barlow's formula (thin-walled pipe)."""
     return P * D / (2.0 * wall)
 
 
@@ -51,15 +53,15 @@ class PipeSegment:
     L: float
     wall: float
     sigma_y: float = 235e6
-    burst_factor: float = 2.4      # sigma_burst / sigma_y для 09Г2С
-    dynamic_derate: float = 0.55   # понижение прочности при ударном нагружении
-    wall_loss: float = 0.0         # доля утонения от коррозии (задаётся отказом)
-    fatigue: float = 0.0           # накопленное повреждение, 1.0 = разрушение
-    cycles: int = 0                # число зарегистрированных циклов нагружения
+    burst_factor: float = 2.4      # sigma_burst / sigma_y for 09G2S steel
+    dynamic_derate: float = 0.55   # strength reduction under impact loading
+    wall_loss: float = 0.0         # fraction of wall thinning from corrosion (set by a fault)
+    fatigue: float = 0.0           # accumulated damage, 1.0 = rupture
+    cycles: int = 0                # number of recorded loading cycles
     last_cycle_t: float = -1e9
     ruptured: bool = False
-    P_peak: float = 0.0            # Па, максимум за прогон
-    dPdt_peak: float = 0.0         # Па/с, максимум за прогон
+    P_peak: float = 0.0            # Pa, maximum over the run
+    dPdt_peak: float = 0.0         # Pa/s, maximum over the run
 
     @property
     def wall_eff(self) -> float:
@@ -67,22 +69,23 @@ class PipeSegment:
 
     @property
     def P_burst(self) -> float:
-        """Статическое давление разрушения (квазистатическое нагружение)."""
+        """Static burst pressure (quasi-static loading)."""
         return 2.0 * self.sigma_y * self.burst_factor * self.wall_eff / self.D
 
     @property
     def P_burst_dynamic(self) -> float:
         """
-        Давление разрушения при ударном нагружении.
+        Burst pressure under impact loading.
 
-        Понижающий коэффициент учитывает концентрацию напряжений на опорах и
-        сварных швах и динамическое усиление отклика; физически осмысленная
-        полоса 0.3...0.7. Значение 0.55 перекалибровано совместно с переходом
-        на адиабатический K_s в wave_speed (пики выросли в ~1.3 раза):
-        известные случаи разрушения по-прежнему воспроизводятся с запасом,
-        а штатные переходные оттайки не копят усталость. Прежние 0.45 были
-        откалиброваны под заниженные изотермическим модулем пики. Параметр
-        подлежит экспертной приёмке (docs/VALIDATION.md).
+        The reducing coefficient accounts for stress concentration at supports
+        and welds and for dynamic amplification of the response; the physically
+        meaningful band is 0.3...0.7. The value 0.55 was recalibrated together
+        with the move to the adiabatic K_s in wave_speed (the peaks grew by a
+        factor of about 1.3): the known rupture cases are still reproduced with
+        margin, while routine defrost transients accumulate no fatigue. The
+        earlier 0.45 was calibrated against peaks that the isothermal modulus
+        had underestimated. The parameter is subject to expert acceptance
+        (docs/VALIDATION.md).
         """
         return self.P_burst * self.dynamic_derate
 
@@ -93,15 +96,15 @@ class PipeSegment:
 
 def joukowsky_spike(seg: PipeSegment, rho_liq: float, dv: float,
                     K: float) -> float:
-    """Скачок давления по Жуковскому при изменении скорости жидкости на dv."""
+    """Joukowsky pressure surge for a change of liquid velocity by dv."""
     a = wave_speed(seg.D, seg.wall_eff, rho_liq, K)
     return rho_liq * a * abs(dv)
 
 
-# Условия возникновения конденсационного удара.
-SHOCK_PRESSURE_RATIO = 1.5      # P_змеевика / P_всасывания
-SHOCK_METAL_SUPERHEAT = 20.0    # К, перегрев металла над температурой всасывания
-SHOCK_MIN_SUBCOOL = 15.0        # К, недогрев поступающей жидкости
+# Conditions for condensation-induced shock.
+SHOCK_PRESSURE_RATIO = 1.5      # P_coil / P_suction
+SHOCK_METAL_SUPERHEAT = 20.0    # K, metal superheat above the suction temperature
+SHOCK_MIN_SUBCOOL = 15.0        # K, subcooling of the incoming liquid
 
 
 def condensation_shock(seg: PipeSegment,
@@ -111,22 +114,24 @@ def condensation_shock(seg: PipeSegment,
                        header: "PipeSegment" = None,
                        t_now: float = 0.0) -> dict:
     """
-    Конденсационный удар при поступлении холодной жидкости в горячий змеевик.
+    Condensation-induced shock when cold liquid enters a hot coil.
 
-    Механизм (Wylie & Streeter; IIAR Bulletin 116):
-    холодная жидкость, попадая в объём горячего пара, вызывает лавинную
-    конденсацию. Паровая полость схлопывается, и столб жидкости разгоняется
-    под действием ПОЛНОГО перепада давления между змеевиком и линией
-    всасывания. Скорость столба ограничена соотношением Бернулли
-    v = sqrt(2*dP/rho), а последующее торможение о тупик или отвод даёт скачок
-    по Жуковскому dP = rho*a*v.
+    The mechanism (Wylie & Streeter; IIAR Bulletin 116): cold liquid
+    entering a volume of hot vapour causes runaway condensation. The vapour
+    cavity collapses and the liquid column accelerates under the FULL
+    pressure difference between the coil and the suction line. The column's
+    velocity is bounded by the Bernoulli relation v = sqrt(2*dP/rho), and
+    the subsequent stop against a dead end or a bend gives the Joukowsky
+    surge dP = rho*a*v.
 
-    Существенно, что движущей силой является перепад давления, а НЕ тепловой
-    баланс потока жидкости: последний даёт скорости порядка 0.5 м/с и удары в
-    единицы бар, что противоречит натурным данным (100...700 бар).
+    It matters that the driving force is the pressure difference and NOT the
+    thermal balance of the liquid flow: the latter gives velocities of about
+    0.5 m/s and shocks of a few bar, which contradicts field data
+    (100...700 bar).
 
-    Аргумент header, если задан, позволяет оценить удар и в общем коллекторе
-    всасывания: скорость там масштабируется обратно площади сечения.
+    The header argument, when given, allows the shock in the common suction
+    header to be estimated as well: the velocity there scales inversely with
+    the cross-sectional area.
     """
     null = {"P_peak": P_coil, "dPdt": 0.0, "dv": 0.0, "rupture": False,
             "segment": None}
@@ -143,14 +148,15 @@ def condensation_shock(seg: PipeSegment,
         return null
 
     rho = pr.rho_l(P_feed)
-    # Адиабатический модуль упругости жидкости при температуре подачи --
-    # столб разгоняется именно холодной жидкостью со стороны питания.
+    # Adiabatic bulk modulus of the liquid at the feed temperature -- the
+    # column is accelerated by exactly that cold liquid from the feed side.
     K = pr.K_liq(P_feed)
     dP_drive = P_coil - P_feed
     v = (2.0 * dP_drive / rho) ** 0.5
 
-    # Доля сечения, занятая разогнанным столбом. Пробковый режим не заполняет
-    # трубу целиком; коэффициент откалиброван по натурным данным о разрушениях.
+    # Fraction of the cross-section taken by the accelerated column. Slug flow
+    # does not fill the pipe completely; the coefficient is calibrated against
+    # field data on ruptures.
     slug_factor = 0.85
 
     worst = None
@@ -176,8 +182,8 @@ def condensation_shock(seg: PipeSegment,
         rupture = True
         s.ruptured = True
     elif margin > 0.55:
-        # Малоцикловая усталость копится ПО СОБЫТИЯМ, а не по шагам
-        # интегрирования: один переходный процесс -- один цикл нагружения.
+        # Low-cycle fatigue accumulates PER EVENT rather than per integration
+        # step: one transient is one loading cycle.
         if t_now - s.last_cycle_t > 10.0:
             s.fatigue += margin ** 6
             s.last_cycle_t = t_now
@@ -191,7 +197,7 @@ def condensation_shock(seg: PipeSegment,
 
 
 def make_segments(cfg) -> dict:
-    """Сегменты трубопровода из конфигурации установки."""
+    """Pipe segments from the plant configuration."""
     segs = {}
     for ev in cfg.evaporators:
         segs[ev.tag] = PipeSegment(

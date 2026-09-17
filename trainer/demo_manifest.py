@@ -1,23 +1,26 @@
 # -*- coding: utf-8 -*-
 """
-Манифест демонстрации: что интерфейсу известно о существующих прогонах.
+The demo manifest: what the interface knows about the existing runs.
 
-    py trainer/demo_manifest.py                      # собрать манифест
-    py trainer/demo_manifest.py --selftest           # проверить часы replay
-    py trainer/demo_manifest.py --traces-out DIR     # выгрузить лёгкие трейсы
+    py trainer/demo_manifest.py                      # build the manifest
+    py trainer/demo_manifest.py --selftest           # check the replay clock
+    py trainer/demo_manifest.py --traces-out DIR     # export light traces
 
-Зачем отдельный слой. Тренажёр до сих пор знал об эталонных исходах из
-вписанного руками словаря REF в build_trainer.py, а о 24 сохранённых трейсах
-не знал вообще. Пока список моделей и сценариев живёт в коде интерфейса,
-каждый новый прогон требует правки JS; с манифестом достаточно пересобрать
-HTML. Это прямое требование: набор сценариев не закрыт (ожидается пересъёмка
-S3), и появление седьмой строки в матрице не должно быть работой программиста.
+Why a separate layer. The trainer used to know the reference outcomes
+from a REF dictionary typed by hand into build_trainer.py, and knew
+nothing at all about the saved transcripts. While the list of models and
+scenarios lives in the interface code, every new run requires editing
+JS; with a manifest it is enough to rebuild the HTML. This is a direct
+requirement: the scenario set is not closed (a re-measurement of S3 is
+expected), and a seventh row in the matrix must not be a programmer's
+job.
 
-Счёт НЕ пересчитывается здесь заново. Обоснованность аварийного останова
-берётся из tests/report_metrics.esd_justification, а сам балл -- из
-nh3twin.metrics.bench_score_run, то есть ровно теми же функциями, что печатают
-официальную таблицу. Иначе демонстрация со временем начала бы показывать числа,
-расходящиеся с публикацией, причём незаметно.
+The score is NOT recomputed here. Whether an emergency shutdown was
+justified comes from tests/report_metrics.esd_justification, and the
+score itself from nh3twin.metrics.bench_score_run -- i.e. from exactly
+the functions that print the official table. Otherwise the demo would
+in time start showing numbers that disagree with the publication, and do
+so unnoticed.
 """
 
 from __future__ import annotations
@@ -33,8 +36,9 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
-# Логика счёта живёт в tests/ и переиспользуется, а не дублируется: скопированная
-# формула разъедется с официальной таблицей при первой же правке метрик.
+# The scoring logic lives in tests/ and is reused rather than duplicated: a
+# copied formula would drift from the official table with the first edit to the
+# metrics.
 sys.path.insert(0, os.path.join(ROOT, "tests"))
 
 from nh3twin import metrics as M                                    # noqa: E402
@@ -44,48 +48,53 @@ from nh3twin.scenarios import SCENARIOS                             # noqa: E402
 import report_metrics as R                                          # noqa: E402
 
 
-# Пути по умолчанию повторяют дефолты report_metrics: прогоны нового сценария
-# законно лежат в собственном файле (base_S6.jsonl, ponr_S6.json).
-BASE_GLOBS = ["results/baselines.jsonl", "results/base_S*.jsonl"]
-# Опубликованные прогоны моделей: по файлу на модель, перечислены явно.
-# Маской нельзя -- рядом лежат осколки по одной задаче (…_S3.jsonl), куски
-# докачки (…_head/…_tail/…_partial/…_resumed), перепроверки (…_replayed) и
-# архивы прежних версий двойника (…_archive, …_v1). Появление нового файла
-# сборка замечает сама (_unlisted_llm) и говорит об этом вслух.
+# The default paths repeat those of report_metrics: the runs of a new scenario
+# legitimately live in a file of their own (base_S6.jsonl, ponr_S6.json).
+# Перечислено явно, а не маской: results/base_S*.jsonl захватывает и
+# base_S6_isoK_archive.jsonl -- прогон прежней версии физики, который в
+# склейке победил бы текущий (побеждает последний прочитанный).
+BASE_GLOBS = ["results/baselines.jsonl", "results/base_S6.jsonl"]
+# Published model runs: one file per model, listed explicitly. A glob will not
+# do -- next to them lie single-task shards (…_S3.jsonl), pieces of a resumed
+# run (…_head/…_tail/…_partial/…_resumed), re-derivations (…_replayed) and
+# archives of earlier twin versions (…_archive, …_v1). A new file is noticed by
+# the build itself (_unlisted_llm), which says so out loud.
 LLM_GLOBS = [
-    "results/llm.jsonl",                    # четыре модели Claude, 24 прогона
+    "results/llm.jsonl",                    # four Claude models, 24 runs
     "results/llm_gpt-5.6-luna.jsonl",
     "results/llm_gpt-5.6-sol.jsonl",
     "results/llm_gpt-5.6-terra.jsonl",
     "results/llm_gpt-6-astra.jsonl",
     "results/glm-5.3_zai_r1.jsonl",
 ]
-# Что в results/ заведомо не итоговый файл прогона.
+# What in results/ is certainly not a final run file.
 LLM_SKIP = re.compile(r"(_S\d+|_head|_tail|_partial|_resumed|_replayed"
                       r"|_archive|_v\d+)\.jsonl$")
-# Прогоны, измеренные пользователем самостоятельно (benchmark.py run). Лежат
-# отдельно от опубликованной матрицы и помечены в таблице как свои: 24
-# опубликованных прогона сделаны в прежнем порядке и пересъёмке не подлежат.
+# Runs the repo owner measured themselves (benchmark.py run). They live apart
+# from the published matrix and are marked in the table as their own: the
+# published runs were made in the earlier order and are not to be re-measured.
 USER_GLOBS = ["results/user/*.jsonl"]
 PONR_GLOBS = ["results/ponr.json", "results/ponr_S*.json"]
 OUT = "trainer/demo_manifest.json"
 
-# Поля трейса, нужные интерфейсу. `obs` сознательно отброшен: наблюдение
-# генерирует сам твин при воспроизведении (он детерминирован), а хранение
-# 24 копий текста щита раздувает манифест с 1.3 до 6.4 МБ. Воссоздать нельзя
-# только ответ модели -- он и остаётся.
+# The trace fields the interface needs. `obs` is deliberately dropped: the twin
+# generates the observation itself on replay (it is deterministic), while
+# storing dozens of copies of the panel text inflates the manifest from 1.3 to
+# 6.4 MB. The one thing that cannot be recreated is the model's answer -- and
+# that is what stays.
 TRACE_KEEP = ("t_rel", "action", "status", "tokens", "wall_s", "error", "reply")
 
 
 # =========================================================================
-# Загрузка
+# Loading
 # =========================================================================
 
 def _load_rows(globs, src="base"):
-    """Строки прогонов с пометкой источника.
+    """
+    Run rows tagged with their source.
 
-    Источник нужен для склейки: один и тот же слаг модели, измеренный
-    пользователем, не должен слиться с опубликованной строкой.
+    The source is needed for de-duplication: the same model slug measured by
+    the repo owner must not merge with a published row.
     """
     rows = []
     for pat in globs:
@@ -101,22 +110,26 @@ def _load_rows(globs, src="base"):
 
 
 def _base_model(policy: str) -> str:
-    """Модель без пометки прогона: llm:gpt-5.6-terra:re-high -> gpt-5.6-terra.
+    """
+    The model without a run label: llm:gpt-5.6-terra:re-high ->
+    gpt-5.6-terra.
 
-    Третий сегмент -- это метка конкретного прогона (уровень раздумий,
-    номер повтора, подписка провайдера), а не другая модель.
+    The third segment is a label of one particular run (reasoning level,
+    repeat number, provider subscription), not a different model.
     """
     parts = (policy or "").split(":")
     return parts[1] if len(parts) > 1 and parts[0] == "llm" else ""
 
 
 def _unlisted_llm(globs=None):
-    """Файлы, в которых есть модель, не показанная в демо вовсе.
+    """
+    Files that contain a model the demo does not show at all.
 
-    Список файлов задан руками, и это правильно: рядом лежат осколки и
-    архивы. Но новая модель не должна пропасть молча. Исследования
-    чувствительности (те же модели под другими метками прогона) молчат:
-    они не отдельные участники таблицы, а разброс уже показанного.
+    The file list is maintained by hand, and that is right: shards and
+    archives lie next to them. But a new model must not disappear silently.
+    Sensitivity studies (the same models under other run labels) stay
+    quiet: they are not separate participants of the table but the spread
+    of one that is already shown.
     """
     listed_files, shown = set(), set()
     for pat in (globs or LLM_GLOBS):
@@ -156,7 +169,9 @@ def _load_ponr(globs):
 
 
 def _commit() -> str:
-    """Версия бенчмарка. Без неё запись в таблице невозможно воспроизвести."""
+    """
+    The benchmark version. Without it a row in the table cannot be reproduced.
+    """
     try:
         r = subprocess.run(["git", "-C", ROOT, "rev-parse", "--short", "HEAD"],
                            capture_output=True, text=True, timeout=10)
@@ -166,11 +181,14 @@ def _commit() -> str:
 
 
 # =========================================================================
-# Сборка
+# Assembly
 # =========================================================================
 
 def _trace_stats(path):
-    """Сводка по трейсу: сколько решений и насколько дорого думала модель."""
+    """
+    Trace summary: how many decisions there were and how expensively the model
+    thought.
+    """
     if not path:
         return None
     full = path if os.path.isabs(path) else os.path.join(ROOT, path)
@@ -191,8 +209,8 @@ def _trace_stats(path):
         "tokens_total": sum(toks),
         "tokens_median": int(statistics.median(toks)),
         "tokens_max": max(toks),
-        # Виртуальные секунды, купленные размышлением. Главная величина
-        # демонстрации: именно она объясняет, почему верный ответ опоздал.
+        # Virtual seconds bought with deliberation. The main quantity of the
+        # demo: it is what explains why a correct answer arrived late.
         "think_s_total": round(sum(toks) / THINK_RATE, 1),
     }
 
@@ -203,11 +221,12 @@ def _run_id(row) -> str:
 
 def _dedup(rows):
     """
-    Одна клетка -- один прогон, побеждает последний прочитанный.
+    One cell, one run; the last one read wins.
 
-    Клетки S6 лежат и в общем baselines.jsonl, и в собственном base_S6.jsonl
-    (так их и считали), поэтому без склейки сценарий попадал в манифест
-    дважды и число доступных записей оказывалось завышенным.
+    The S6 cells lie both in the shared baselines.jsonl and in its own
+    base_S6.jsonl (that is how they were computed), so without
+    de-duplication the scenario entered the manifest twice and the number of
+    available recordings came out too high.
     """
     out = {}
     for r in rows:
@@ -217,16 +236,19 @@ def _dedup(rows):
 
 
 def _lang(row) -> str:
-    """Язык задания прогона. Опорные политики промпта не видят -- ru."""
+    """
+    The task language of a run. Reference policies never see the prompt -- ru.
+    """
     return ((row.get("llm") or {}).get("prompt_lang") or "ru")
 
 
 def _run_key(row) -> str:
-    """Идентификатор прогона в манифесте: источник + политика + задача.
+    """
+    The run identifier in the manifest: source plus policy plus task.
 
-    Собирается в одном месте: самопроверка ищет трейс по этому же ключу, и
-    расхождение оставило бы её без данных -- молча, с нулём проверенных
-    шагов вместо двух тысяч.
+    It is assembled in one place: the self-test looks up a trace by this
+    same key, and a mismatch would leave it without data -- silently, with
+    zero checked steps instead of two thousand.
     """
     lang = _lang(row)
     return (row.get("_src", "base") + "/" + _run_id(row)
@@ -251,8 +273,9 @@ def build(base_globs=BASE_GLOBS, llm_globs=LLM_GLOBS, ponr_globs=PONR_GLOBS,
     runs = []
     for row in allrows:
         sid = row["scenario"]
-        # bench_score_run требует признак обоснованности на строке; он выводится
-        # из прогонов π_null/π_esd, а не назначается мнением.
+        # bench_score_run needs the justification flag on the row; it is
+        # derived from the pi_null / pi_esd runs rather than assigned by
+        # opinion.
         row = dict(row, esd_justified=just.get(sid, False))
         pol = row["policy"]
         is_model = pol.startswith("llm:")
@@ -297,8 +320,8 @@ def build(base_globs=BASE_GLOBS, llm_globs=LLM_GLOBS, ponr_globs=PONR_GLOBS,
             "ponr_cat_s": p.get("ponr_cat_s"),
             "ponr_clean_s": p.get("ponr_clean_s"),
         })
-    # Сценарии, встреченные в данных, но отсутствующие в реестре, тоже попадают
-    # в манифест: пересъёмка S3 может приехать как отдельная строка.
+    # Scenarios met in the data but absent from the registry also reach the
+    # manifest: a re-measurement of S3 may arrive as a separate row.
     known = {s["sid"] for s in scenarios}
     for sid in sorted({r["scenario"] for r in runs} - known):
         scenarios.append({"sid": sid, "title": sid, "brief": "",
@@ -321,9 +344,10 @@ def build(base_globs=BASE_GLOBS, llm_globs=LLM_GLOBS, ponr_globs=PONR_GLOBS,
         vals = list(a["scores"].values())
         a["score_mean"] = round(sum(vals) / len(vals), 1) if vals else None
         a["score_worst"] = min(vals) if vals else None
-        # Полнота строки. Среднее по двум задачам из шести -- не то же число,
-        # что среднее по шести, и ставить их в один столбец без пометки
-        # значит вводить в заблуждение тем вернее, чем аккуратнее таблица.
+        # Completeness of a row. A mean over two tasks out of six is not the
+        # same number as a mean over six, and putting them in one column
+        # without a mark misleads all the more surely the tidier the table
+        # looks.
         a["n_scored"] = len(vals)
         a["n_total"] = n_total
         a["complete"] = len(vals) == n_total
@@ -334,16 +358,16 @@ def build(base_globs=BASE_GLOBS, llm_globs=LLM_GLOBS, ponr_globs=PONR_GLOBS,
             desc = ("измерено пользователем через benchmark.py run; не часть "
                     "опубликованной матрицы")
         if a.get("prompt_lang", "ru") != "ru":
-            # Задание на другом языке -- другой столбец, а не та же строка:
-            # опубликованные прогоны отвечали на русское задание.
+            # A task in another language is another column, not the same row:
+            # the published runs answered the Russian task.
             name += f", задание {a['prompt_lang'].upper()}"
             desc += ("; задание на языке " + a["prompt_lang"].upper()
                      + ", напрямую с русским треком не сравнивается")
         a["label"], a["desc"] = name, desc
 
-    # Regulation Gap считается относительно того же оппонента, что в отчёте,
-    # и только для полных строк: разность средних по разным наборам задач --
-    # не разрыв с регламентом, а бессмыслица.
+    # The Regulation Gap is computed against the same opponent as in the
+    # report, and only for complete rows: a difference of means over different
+    # task sets is not a gap but nonsense.
     reg = agents.get("policy|ru|regulation", {}).get("score_mean")
     for a in agents.values():
         a["reg_gap"] = (round(a["score_mean"] - reg, 1)
@@ -358,16 +382,16 @@ def build(base_globs=BASE_GLOBS, llm_globs=LLM_GLOBS, ponr_globs=PONR_GLOBS,
             "think_rate_tok_per_s": THINK_RATE,
             "poll_period_s": POLL_PERIOD,
             "catalog_size": len(CATALOG),
-            # Канонический язык промпта сохранённых прогонов. Английский трек
-            # добавляется отдельно и помечается здесь же, иначе сравнивать
-            # строки таблицы между языками будет нельзя.
+            # The canonical prompt language of the saved runs. The English
+            # track is added separately and is marked right here, or table rows
+            # could not be compared across languages.
             "prompt_lang": "ru",
             "token_accounting": "output_tokens",
         },
-        # Обоснованность аварийного останова по сценариям. Прогон человека
-        # считается в браузере той же bench_score_run, а ей нужен этот
-        # признак; выводится он из опорных политик, поэтому приходит отсюда,
-        # а не назначается в интерфейсе.
+        # Whether an emergency shutdown was justified, per scenario. A person's
+        # run is scored in the browser by that same bench_score_run, which
+        # needs this flag; it is derived from the reference policies, so it
+        # comes from here rather than being assigned in the interface.
         "esd_just": {sid: bool(just.get(sid, False))
                      for sid in sorted({s["sid"] for s in scenarios})},
         "esd_just_why": {sid: just_why.get(sid, "")
@@ -382,7 +406,7 @@ def build(base_globs=BASE_GLOBS, llm_globs=LLM_GLOBS, ponr_globs=PONR_GLOBS,
 
 
 def light_traces(manifest):
-    """Трейсы без поля obs -- источник истины для Watch."""
+    """Traces without the obs field -- the source of truth for Watch."""
     out = {}
     for r in manifest["runs"]:
         if not r["watchable"]:
@@ -402,18 +426,19 @@ def light_traces(manifest):
 
 
 # =========================================================================
-# Самопроверка часов
+# Clock self-test
 # =========================================================================
 
 def selftest(manifest) -> int:
     """
-    Проверка, без которой Watch показывал бы вымысел: время в трейсе и время
-    воспроизведения должны быть связаны каноническими часами
+    The check without which Watch would be showing fiction: the time in a
+    trace and the time of a replay must be related by the canonical clock
 
-        t_действия = t_наблюдения + токены/THINK_RATE + задержка команды
+        t_action = t_observation + tokens/THINK_RATE + command latency
 
-    Последний шаг исключён: эпизод мог кончиться, пока модель думала (именно
-    это и произошло у Haiku в S1 -- верное решение опоздало на 17 с).
+    The last step is excluded: an episode could end while the model was
+    still thinking (which is exactly what happened to Haiku in S1 -- the
+    correct decision was 17 s late).
     """
     rows = {r["id"]: r for r in manifest["runs"]}
     worst, checked, bad = 0.0, 0, []

@@ -1,36 +1,41 @@
 """
-Переходник между языковой моделью и циклом эпизода.
+Adapter between a language model and the episode loop.
 
-Модель играет ту же роль, что и эталонные политики: получает наблюдение и
-список действий, возвращает пару (идентификатор действия, число токенов на
-размышление). Отличие одно -- токены здесь не назначены разработчиком, а
-приходят от самой модели, поэтому многословие напрямую превращается в
-виртуальные секунды и, при неудачном стечении, в аварию.
+The model plays the same role as the reference policies: it receives an
+observation and the list of actions and returns a pair (action id,
+number of tokens spent thinking). The one difference is that the tokens
+here are not assigned by a developer but come from the model itself, so
+verbosity turns directly into virtual seconds and, on an unlucky day,
+into an accident.
 
-Устройство запроса
-------------------
-Системная часть промпта фиксирована побайтно на весь прогон: роль, правила
-ответа и полный каталог из 133 действий. Это не только экономия -- одинаковый
-префикс кэшируется на стороне провайдера, и задержка вызова падает с ~20 с до
-~4 с, что важно при сотнях решений за эпизод.
+How the request is built
+------------------------
+The system part of the prompt is fixed byte for byte for the whole run:
+the role, the answer rules and the full catalog of 133 actions. This is
+not only economy -- an identical prefix is cached on the provider's side
+and the call latency drops from about 20 s to about 4 s, which matters
+when there are hundreds of decisions per episode.
 
-Пользовательская часть меняется на каждом шаге: вводная сценария, текущее
-наблюдение (то же самое, что видят RulePolicy и человек в тренажёре) и
-короткая история собственных действий с результатами. История -- единственная
-память агента: каждый вызов независим, состояние в модели не накапливается.
+The user part changes at every step: the scenario briefing, the current
+observation (the same one RulePolicy and a person in the trainer see)
+and a short history of the agent's own actions with their results. The
+history is the agent's only memory: every call is independent and no
+state accumulates inside the model.
 
-Учёт токенов
-------------
-За стоимость размышления принимается `usage.output_tokens` ответа, то есть
-рассуждение плюс сам ответ. Скрытые рассуждающие токены, если модель их
-порождает, тоже входят в эту величину -- и должны входить: установка не
-делает различия между «думал вслух» и «думал молча».
+Token accounting
+----------------
+The cost of deliberation is taken to be the response's
+`usage.output_tokens`, i.e. the reasoning plus the answer itself. Hidden
+reasoning tokens, if the model produces them, are included in that
+figure too -- and they must be: the plant makes no distinction between
+"thought out loud" and "thought silently".
 
-Отказоустойчивость
-------------------
-Сбой вызова (таймаут, лимит, непарсимый ответ) не прерывает эпизод: шаг
-превращается в NO_OP с нулевой стоимостью и записывается в статистику ошибок.
-Иначе один сетевой сбой на 60-м шаге обесценивал бы весь прогон.
+Fault tolerance
+---------------
+A failed call (timeout, rate limit, unparseable answer) does not abort
+the episode: the step becomes a NO_OP at zero cost and is recorded in
+the error statistics. Otherwise one network failure at step 60 would
+devalue the whole run.
 """
 
 from __future__ import annotations
@@ -51,7 +56,7 @@ from .actions import CATALOG
 from .policies import Policy
 
 
-# Путь к исполняемому файлу Claude Code; переопределяется переменной среды.
+# Path to the Claude Code executable; overridden by an environment variable.
 DEFAULT_CLI = os.environ.get(
     "NH3_CLAUDE_CLI",
     os.path.expanduser("~/.local/bin/claude.exe" if os.name == "nt"
@@ -60,15 +65,15 @@ DEFAULT_CLI = os.environ.get(
 DEFAULT_CODEX_CLI = os.environ.get(
     "NH3_CODEX_CLI", shutil.which("codex") or shutil.which("codex.cmd") or "codex")
 
-# Инструменты Claude Code агенту не нужны: он должен только рассуждать и
-# называть действие. Открытый доступ к файловой системе позволил бы ему
-# прочитать исходники двойника, то есть подглядеть ответ.
+# The agent does not need Claude Code's tools: it only has to reason and name
+# an action. Open access to the file system would let it read the twin's
+# sources, i.e. peek at the answer.
 _DENY_TOOLS = ("Bash,Read,Write,Edit,MultiEdit,Glob,Grep,Task,Agent,WebFetch,"
                "WebSearch,TodoWrite,NotebookEdit,SlashCommand,Skill")
 
 
 # =========================================================================
-# Системная часть промпта
+# The system part of the prompt
 # =========================================================================
 
 _ROLE = """\
@@ -126,7 +131,7 @@ _CAT_TITLES = {
 
 
 def catalog_text() -> str:
-    """Каталог действий, сгруппированный по категориям."""
+    """The action catalog, grouped by category."""
     order, groups = [], {}
     for a in CATALOG:
         if a.category not in groups:
@@ -143,7 +148,8 @@ def catalog_text() -> str:
 
 
 def system_prompt(lang: str = "ru") -> str:
-    """Системная часть. Английский трек -- отдельный, помечается в прогоне."""
+    """The system part. The English track is separate and is marked in the run.
+    """
     if lang == "en":
         from .prompt_en import system_prompt as _en
         return _en()
@@ -151,14 +157,15 @@ def system_prompt(lang: str = "ru") -> str:
 
 
 # =========================================================================
-# Пользовательская часть промпта
+# The user part of the prompt
 # =========================================================================
 
 def _history_text(log, keep: int) -> str:
     """
-    Память агента -- это журнал эпизода, а не отдельная структура: результат
-    действия («команда принята», «наряд выдан», «отказано») сам по себе
-    информативен, и в S1 именно он выдаёт молчаливый отказ секвенсора.
+    The agent's memory is the episode log rather than a structure of its
+    own: the result of an action ("command accepted", "dispatch issued",
+    "refused") is informative in itself, and in S1 it is exactly what gives
+    away the sequencer's silent refusal.
     """
     if not log:
         return "ИСТОРИЯ: ты ещё ничего не предпринимал."
@@ -194,7 +201,7 @@ def user_prompt(obs, legal, ep, keep: int, lang: str = "ru") -> str:
 
 
 # =========================================================================
-# Разбор ответа
+# Parsing the answer
 # =========================================================================
 
 _AID_RE = re.compile(r"[A-Z_]+(?::[A-Z0-9_\-]+)*")
@@ -202,12 +209,12 @@ _AID_RE = re.compile(r"[A-Z_]+(?::[A-Z0-9_\-]+)*")
 
 def parse_action(text: str, legal_ids: set) -> tuple:
     """
-    Возвращает (aid, статус). Статус: ok | snapped | illegal | unparsed.
+    Returns (aid, status). Status: ok | snapped | illegal | unparsed.
 
-    Разбор намеренно снисходителен к оформлению (модель может обернуть ответ
-    в кавычки или дописать точку), но не к сути: выдуманный идентификатор
-    остаётся выдуманным и превращается в NO_OP -- ровно так же, как несуществующая
-    команда на реальной панели просто ничего не сделает.
+    The parsing is deliberately lenient about formatting (a model may wrap
+    the answer in quotes or add a full stop) but not about substance: an
+    invented identifier stays invented and turns into a NO_OP -- exactly as
+    a non-existent command on a real panel simply does nothing.
     """
     if not text:
         return "NO_OP", "unparsed"
@@ -222,8 +229,8 @@ def parse_action(text: str, legal_ids: set) -> tuple:
     for c in cands:
         if c in legal_ids:
             return c, "ok"
-    # Ответ без маркера или с мусором: ищем последний известный идентификатор
-    # в свободном тексте.
+    # An answer without the marker, or with clutter: we look for the last known
+    # identifier in the free text.
     found = [w for w in _AID_RE.findall(text) if w in legal_ids]
     if found:
         return found[-1], "snapped" if marks else "unparsed"
@@ -233,7 +240,7 @@ def parse_action(text: str, legal_ids: set) -> tuple:
 
 
 # =========================================================================
-# Политика
+# The policy
 # =========================================================================
 
 @dataclass
@@ -257,19 +264,19 @@ class LLMStats:
 
 class ClaudeCLIPolicy(Policy):
     """
-    Языковая модель через Claude Code в неинтерактивном режиме.
+    A language model through Claude Code in non-interactive mode.
 
-    Каждый вызов -- отдельный процесс без общей сессии. Память агента
-    ограничена историей, которую мы сами кладём в промпт: это делает прогон
-    воспроизводимо-однородным (нет дрейфа контекста) и устойчивым к падению
-    любого отдельного вызова.
+    Every call is a separate process with no shared session. The agent's
+    memory is limited to the history we put into the prompt ourselves: that
+    makes a run reproducibly uniform (no context drift) and robust against
+    any single call failing.
     """
 
     def __init__(self, model="haiku", cli=DEFAULT_CLI, history=14,
                  timeout=240, retries=1, trace_path=None, sysfile=None,
                  label=None, verbose=False, prompt_lang="ru"):
-        # Язык задания. Русский -- канонический: 24 опубликованных прогона
-        # отвечали на него, и по умолчанию ничего не меняется.
+        # The task language. Russian is the canonical one: the published runs
+        # answered it, and by default nothing changes.
         self.prompt_lang = prompt_lang
         self.verbose = verbose
         self.model = model
@@ -282,7 +289,7 @@ class ClaudeCLIPolicy(Policy):
         self.stats = LLMStats()
         self.sysfile = sysfile or self._write_sysfile()
 
-    # -- системный промпт живёт в файле: он длинный и должен быть неизменным
+    # -- the system prompt lives in a file: it is long and must stay unchanged
     def _write_sysfile(self) -> str:
         d = os.path.join(os.path.dirname(os.path.dirname(
             os.path.abspath(__file__))), "results", "_prompt")
@@ -293,10 +300,10 @@ class ClaudeCLIPolicy(Policy):
             f.write(system_prompt(self.prompt_lang))
         return path
 
-    # -- вызов модели ----------------------------------------------------
+    # -- calling the model ----------------------------------------------
 
     def _call(self, prompt: str) -> tuple:
-        """Возвращает (текст, число выходных токенов, стоимость, ошибка)."""
+        """Returns (text, number of output tokens, cost, error)."""
         cmd = [
             self.cli, "-p",
             "--model", self.model,
@@ -327,7 +334,7 @@ class ClaudeCLIPolicy(Policy):
                 float(j.get("total_cost_usd") or 0.0),
                 None)
 
-    # -- контракт политики ------------------------------------------------
+    # -- the policy contract ----------------------------------------------
 
     def act(self, obs, legal, ep):
         legal_ids = {a.aid for a in legal}
@@ -371,7 +378,7 @@ class ClaudeCLIPolicy(Policy):
                   + (f"  ОШИБКА {err}" if err else ""), flush=True)
         return aid, tokens
 
-    # -- протокол ---------------------------------------------------------
+    # -- transcript ---------------------------------------------------------
 
     def _trace(self, obs, prompt, text, aid, status, tokens, wall, err):
 
@@ -591,24 +598,24 @@ class ZAIChatPolicy(ClaudeCLIPolicy):
 
 
 # =========================================================================
-# Воспроизведение записанного прогона
+# Replaying a recorded run
 # =========================================================================
 
 class ReplayPolicy(Policy):
     """
-    Проигрывает сохранённый протокол: та же последовательность действий с
-    тем же числом токенов.
+    Plays back a saved transcript: the same sequence of actions with the
+    same token counts.
 
-    Нужна затем, что двойник детерминирован, а модель -- нет. Когда набор
-    метрик расширяется, эталонные политики можно просто пересчитать, а
-    агентный прогон -- нельзя: повторный вызов модели дал бы другой эпизод,
-    и сравнивать было бы уже не с чем. Воспроизведение возвращает ровно тот
-    эпизод, который был, и добывает из него величины, которых при первом
-    прогоне не собирали.
+    It is needed because the twin is deterministic and a model is not. When
+    the metric set is extended, the reference policies can simply be
+    recomputed, but an agent run cannot: calling the model again would give
+    a different episode and there would be nothing left to compare with.
+    A replay returns exactly the episode that happened and extracts from it
+    the quantities that were not collected on the first run.
 
-    Совпадение исхода с записанным проверяется вызывающей стороной: если
-    воспроизведение разошлось, значит двойник перестал быть детерминированным
-    и все сравнения по старым записям недействительны.
+    Whether the outcome matches the recorded one is checked by the caller:
+    if a replay diverged, the twin has stopped being deterministic and every
+    comparison against old records is invalid.
     """
     name = "replay"
 

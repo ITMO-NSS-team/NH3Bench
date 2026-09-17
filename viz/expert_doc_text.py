@@ -1,5 +1,8 @@
 # -*- coding: utf-8 -*-
-"""Текст экспертного описания. Отдельным модулем, чтобы собрать HTML скриптом."""
+"""
+The text of the expert description. A module of its own, so that the HTML can
+be assembled by a script.
+"""
 
 TITLE = "Испытательный стенд «NH3Ops»"
 SUBTITLE = ("Описание имитатора аммиачной холодильной установки и пяти "
