@@ -117,6 +117,9 @@ oracle:
   kind: state_condition
   source: nh3mcp.oracle.verdict (metrics.bench_score_run)
   rule: beats_reg
+  pass:
+    prevented: true
+    score_strictly_above: 94.8
   esd_justified: true
   reference_scores:
     'null': 0.0

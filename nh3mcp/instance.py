@@ -63,6 +63,9 @@ class Instance(BaseModel):
     # The LLM runs needed this (each call was stateless); a harness keeps its
     # own memory, and whether the server should supply one is an experiment.
     history_keep: int = Field(default=0, ge=0, le=50)
+    # The written regulation (π_reg as text, regulation.py) offered to the
+    # agent: the policy-pack experiment (rule R9). Off in the published task.
+    policy_pack: bool = False
     # Who is at the panel, for the run record (`policy` field).
     label: str = "mcp"
 

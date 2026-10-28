@@ -62,7 +62,8 @@ nh3twin/            the digital twin + agent layer (import root)
   providers.py      provider layer: OpenRouter adapter + factory; llm_policy.py untouched
 nh3mcp/             the benchmark as an MCP server (README there): env.py (the loop turned
                     inside out + hidden control), server.py (agent tools), oracle.py (truth,
-                    verdict), reference.py, templates.py + templates/ (DMCP-IH), tests/
+                    verdict), reference.py, reproduce.py, regulation.py (π_reg as written
+                    text, the R9 policy pack), templates.py + templates/ (DMCP-IH), tests/
 benchmark.py        user-facing CLI: run / replay / report / validate / mcp / list-*
 pyproject.toml      `pip install -e ".[mcp]"` for stands and harnesses (editable: oracle reads results/)
 DMCP-IH/            a separate git repo (the harness test stand), not part of this one
@@ -284,14 +285,24 @@ is recorded in `docs/DECISIONS.md`.
   `test_oracle_through_mcp_is_the_published_oracle_run` compares every field; change the
   order in `NH3Env.act` and it fails.
 - **Over MCP the agent never sets its own clock.** Tokens reach the clock only from the
-  stand (`_meta["nh3bench/tokens"]`, or `NH3Env.charge_tokens`); no agent tool takes a
-  token count. An unfed token clock is flagged (`clock_fed: false`), never silently scored
-  as comparable.
+  stand (`_meta["dmcp_ih/model_tokens"]`, DMCP-IH decision 0002; `nh3bench/tokens` is a
+  local synonym, never added to it; or `NH3Env.charge_tokens`); no agent tool takes a
+  token count. An unfed token clock (`clock_fed: false`) is `INFRA_ERROR`, never a
+  verdict on the agent.
+- **An MCP verdict reads its thresholds from the frozen templates, not from `results/`.**
+  π_reg's score and `esd_justified` are written into `nh3mcp/templates/S*.yaml` when they
+  are generated; a retune changes them only through a deliberate regeneration
+  (`templates --check` fails until then).
 - **An MCP run's outcome is its journal, not the server's survival.** A stand kills the
   server ~2 s after the harness disconnects and the play-out takes longer. The journal
   (calls + the deliberation each was charged + a physics digest) is rewritten after every
   call, and `env.replay` re-derives the run exactly — on the `wall` clock too — or refuses
   on another physics version.
+- **The written regulation is π_reg, and the suite proves it.** `nh3mcp/regulation.py`
+  states every action sequence and threshold of `RulePolicy` / `RegulationPolicy`, and
+  `test_regulation.py` parses `policies.py` to require it in both directions. Retune π_reg
+  and the text must follow, or the suite fails; never "fix" the text to read better than
+  the code acts. The pack is off by default — the published task had no regulation.
 - **`server.py` never imports `oracle.py`.** Titles, hazards, traps and key actions name
   the answer; the R3 test scans every tool, resource, prompt and reply for them in both
   languages.
@@ -634,8 +645,12 @@ Short version of where things stand:
 
 - The benchmark runs as an MCP server (`nh3mcp/`) for harness test stands (DMCP-IH issue
   #17, due 2026-11-13): four agent tools, a three-mode clock, journal + replay, oracle with
-  the published score, six generated templates. Open there: a hidden control endpoint on
-  the wire, the gateway feeding tokens, the stand's manifest entry, R7/R8/R9/R10.
+  the published score, six generated templates. Agreed with the stand (its decision 0002):
+  tokens in `_meta["dmcp_ih/model_tokens"]`, verdict `beats_reg` with π_reg's score frozen
+  in the templates. R9's policy pack exists (the written regulation, off by default; the
+  wording awaits the expert). Open: the R9 checker, R7/R8/R10, a control endpoint on the
+  wire (stand issue #3), the manifest entry (`consumes: [model_tokens]`) once its schema
+  is frozen.
 - TypeSafe Jev (a decision model, `openrouter-decisions`) is a user row:
   `results/user/jev.jsonl`, sensitivity runs in `results/user/sensitivity/`; see
   `docs/MODEL-RUNS.md`.

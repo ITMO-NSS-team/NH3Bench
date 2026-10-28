@@ -86,10 +86,17 @@ _CLOCK = {
 
 _BRIEF_HEAD = {"ru": "ВВОДНАЯ СМЕНЫ: ", "en": "SHIFT BRIEFING: "}
 
+_POLICY = {"ru": "На установке действует инструкция оператора по действиям при "
+                 "отклонениях режима -- инструмент read_regulation.",
+           "en": "The plant's operating instruction for abnormal conditions is in "
+                 "force -- the read_regulation tool."}
 
-def task_prompt(scen, lang: str, clock) -> str:
+
+def task_prompt(scen, lang: str, clock, policy_pack: bool = False) -> str:
     """The text a harness is started with. No title, no hazard: only the brief."""
     parts = [role(lang), "", _TOOLS[lang]]
+    if policy_pack:
+        parts += [_POLICY[lang]]
     if clock.mode != "tokens":
         parts += ["", _CLOCK[lang][clock.mode].format(
             s=clock.fixed_tokens / clock.think_rate, k=clock.wall_scale)]
@@ -175,6 +182,8 @@ TOOL_DOC = {
                "и новые показания панели.",
         "wait": "Ничего не предпринимать заданное число секунд (10..600) и "
                 "вернуть новые показания панели.",
+        "read_regulation": "Действующая инструкция оператора: действия при "
+                           "отклонениях режима, по пунктам.",
     },
     "en": {
         "observe": "The SCADA panel right now: instruments, equipment, alarms, "
@@ -188,5 +197,7 @@ TOOL_DOC = {
                "10 s polling tick. Returns the result and the new panel.",
         "wait": "Do nothing for the given number of seconds (10..600) and "
                 "return the new panel.",
+        "read_regulation": "The operating instruction in force: actions on "
+                           "abnormal conditions, point by point.",
     },
 }

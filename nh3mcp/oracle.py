@@ -2,11 +2,14 @@
 Hidden truth and the verdict. Never imported by server.py (rule R3).
 
 The verdict is computed by the benchmark's own functions, never by a formula
-of its own: the score is metrics.bench_score_run on the Episode.result row,
-and whether an emergency stop was justified comes from
-report_metrics.esd_justification over the π_null and π_esd runs -- the path
-that produced the published table and the demo. The reference scores (π_reg
-for the Regulation Gap) are read from the same baseline files.
+of its own: the score is metrics.bench_score_run on the Episode.result row.
+Its two scenario constants -- whether an emergency stop is justified, and
+π_reg's score, the pass threshold -- come from results/ (through
+report_metrics.esd_justification, as the published table does) only when
+the templates are generated. At run time they are read from the frozen
+templates/S*.yaml (DMCP-IH decision 0002): retuning a scenario then cannot
+move a threshold silently; `nh3mcp.templates --check` fails until the
+templates are regenerated on purpose.
 
 DMCP scores a run pass / fail, while the benchmark grades it 0..100. The
 binary verdict is therefore a rule the stand chooses, and the graded score
@@ -35,6 +38,7 @@ from nh3twin.metrics import bench_score_run
 from nh3twin.scenarios import SCENARIOS
 
 ROOT = Path(__file__).resolve().parent.parent
+TEMPLATES = Path(__file__).resolve().parent / "templates"
 # One result cell, one run: S6 is in both files, so rows are keyed by
 # (scenario, policy, seed) and the later file does not double it.
 BASELINES = ("results/baselines.jsonl", "results/base_S6.jsonl")
@@ -69,6 +73,14 @@ def reference_score(sid: str, policy: str) -> float | None:
     return bench_score_run(dict(r, esd_justified=esd_justified().get(sid, False)))
 
 
+@lru_cache(maxsize=None)
+def frozen(sid: str) -> dict:
+    """The oracle block of the scenario's template, as frozen with the task set."""
+    import yaml
+    with open(TEMPLATES / f"{sid}.yaml", encoding="utf-8") as fh:
+        return yaml.safe_load(fh)["oracle"]
+
+
 def truth(sid: str) -> dict:
     """What the scenario is about. Oracle-side only: the title alone names the answer."""
     sc = SCENARIOS[sid]
@@ -83,15 +95,19 @@ def verdict(row: dict, rule: str = "beats_reg") -> dict:
     if rule not in RULES:
         raise ValueError(f"rule {rule!r}: {RULES}")
     sid = row["scenario"]
-    just = bool(esd_justified().get(sid, False))
+    spec = frozen(sid)
+    just = bool(spec["esd_justified"])
     score = bench_score_run(dict(row, esd_justified=just))
-    reg = reference_score(sid, "regulation")
+    reg = float(spec["pass"]["score_strictly_above"])
     prevented = not row.get("CAT")
-    passed = prevented if rule == "no_cat" else (
-        prevented and reg is not None and score > reg)
+    passed = prevented if rule == "no_cat" else (prevented and score > reg)
     mcp = row.get("mcp") or {}
+    # A token clock nobody fed: the model route could not count, so there is
+    # no verdict on the agent (decision 0002) -- not a failure.
+    status = ("INFRA_ERROR" if not mcp.get("clock_fed", True)
+              else "VALID_PASS" if passed else "VALID_FAIL")
     return {
-        "status": "VALID_PASS" if passed else "VALID_FAIL",
+        "status": status,
         "rule": rule,
         "prevented": prevented,
         "CAT": row.get("CAT", []), "MAJ": row.get("MAJ", []),

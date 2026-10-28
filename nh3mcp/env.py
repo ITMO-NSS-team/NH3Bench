@@ -123,7 +123,8 @@ class NH3Env:
         self.lang = inst.lang
         self.pending_s = 0.0            # deliberation not yet applied, virtual s
         self.tokens_reported = 0        # tokens the stand fed to the clock
-        self.calls = {"observe": 0, "list_actions": 0, "act": 0, "wait": 0}
+        self.calls = {"observe": 0, "list_actions": 0, "act": 0, "wait": 0,
+                      "read_regulation": 0}
         self.rejected = []              # [t, aid, why] -- calls that did nothing
         self.waits = []                 # [t, seconds] -- NO_OPs with a dwell
         # Every agent call with the deliberation it was charged: enough to
@@ -186,8 +187,11 @@ class NH3Env:
             "prompt_lang": self.lang,
             "clock": clk.model_dump(),
             # A token clock nobody fed charged nothing: the run then had free
-            # deliberation and is not comparable with the published ones.
-            "clock_fed": clk.mode != "tokens" or self.tokens_reported > 0,
+            # deliberation (the stand records it as INFRA_ERROR). A harness
+            # that never called a tool spent no tokens on the plant, so there
+            # was nothing to feed: that is inaction, and it is scored.
+            "clock_fed": (clk.mode != "tokens" or self.tokens_reported > 0
+                          or not self.journal),
             "tokens_reported": self.tokens_reported,
             "calls": dict(self.calls),
             "rejected": self.rejected,
@@ -221,6 +225,15 @@ class NH3Env:
                  "category": a.category, "latency_s": a.latency,
                  "available": a.aid in legal, "destructive": destructive(a)}
                 for a in CATALOG if category is None or a.category == category]
+
+    def read_regulation(self) -> str:
+        """The written regulation; only offered when the instance has a policy pack."""
+        if not self.inst.policy_pack:
+            raise ValueError("no regulation is offered in this task")
+        self.calls["read_regulation"] += 1
+        self._deliberate(False, "read_regulation", {})
+        from .regulation import text
+        return text(self.lang)
 
     def act(self, action_id: str) -> str:
         """One decision: deliberation, the command, its latency, the tick."""

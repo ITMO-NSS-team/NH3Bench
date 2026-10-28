@@ -24,7 +24,7 @@ from nh3twin.policies import OraclePolicy
 from nh3twin.scenarios import SCENARIOS
 from nh3mcp import oracle, reference, templates, texts
 from nh3mcp.env import replay, warm_episode
-from nh3mcp.server import META_TOKENS, journal_path, write_record
+from nh3mcp.server import META_TOKENS, META_TOKENS_LOCAL, journal_path, write_record
 
 from conftest import call, make, text_of
 
@@ -98,9 +98,14 @@ def test_r2_reset_gives_the_initial_state():
 
 
 @pytest.mark.parametrize("lang", ["ru", "en"])
-def test_r3_no_truth_on_the_agent_side(lang):
-    _, app = make(lang=lang, clock={"mode": "fixed"})
-    text = surface_text(app, run_sequence(app))
+@pytest.mark.parametrize("pack", [False, True])
+def test_r3_no_truth_on_the_agent_side(lang, pack):
+    _, app = make(lang=lang, clock={"mode": "fixed"}, policy_pack=pack)
+    outputs = run_sequence(app)
+    if pack:
+        outputs.append(text_of(call(app, "read_regulation")))
+        outputs += [c.content for c in asyncio.run(app.read_resource("nh3bench://regulation"))]
+    text = surface_text(app, outputs)
     leaks = ["F-STUCK", "F-CTRL", "StuckDefrost", "DefrostDesync", "CAT-", "MAJ-",
              "esd_justified", "key_actions", "hazard", "trap"]
     for sc in SCENARIOS.values():
@@ -157,17 +162,17 @@ def test_tokens_arrive_through_the_gateway_meta():
 
     async def go():
         async with create_connected_server_and_client_session(app) as s:
-            await s.call_tool("observe", {})
-            t0 = env.ep.plant.t
-            await s.call_tool("observe", {})                    # no gateway
-            t1 = env.ep.plant.t
-            await s.call_tool("observe", {}, meta={META_TOKENS: 4000})
-            return t0, t1, env.ep.plant.t
+            ts = [env.ep.plant.t]
+            for meta in (None,                                       # no gateway
+                         {META_TOKENS: 4000},                        # the stand's key
+                         {META_TOKENS_LOCAL: 400},                   # the synonym
+                         {META_TOKENS: 800, META_TOKENS_LOCAL: 800}):  # both: not twice
+                await s.call_tool("observe", {}, meta=meta)
+                ts.append(env.ep.plant.t)
+            return [b - a for a, b in zip(ts, ts[1:])]
 
-    t0, t1, t2 = asyncio.run(go())
-    assert t1 == t0
-    assert t2 - t1 == pytest.approx(100.0)
-    assert env.tokens_reported == 4000
+    assert asyncio.run(go()) == pytest.approx([0.0, 100.0, 10.0, 20.0])
+    assert env.tokens_reported == 4000 + 400 + 800
 
 
 def test_fixed_clock_charges_every_decision():
@@ -181,11 +186,27 @@ def test_fixed_clock_charges_every_decision():
     assert env.ep.plant.t == t1                     # reading is not a decision
 
 
-def test_unfed_token_clock_is_flagged():
+def test_unfed_token_clock_is_no_verdict():
+    """Decision 0002: the route could not count -- INFRA_ERROR, not a failure."""
     env, app = make()
     call(app, "act", {"action_id": "NO_OP"})
     v = oracle.verdict(env.finish())
+    assert v["status"] == "INFRA_ERROR"
     assert v["clock_fed"] is False and v["comparable_with_published"] is False
+    # a harness that never called a tool had nothing to feed: inaction, scored
+    env, _ = make()
+    assert oracle.verdict(env.finish())["status"] == "VALID_FAIL"
+
+
+def test_verdict_reads_frozen_numbers_not_results(monkeypatch):
+    """A retune that moves π_reg must not move a threshold in silence."""
+    row = reference.solve("S3", "esd")                 # 57.1, exactly π_reg's
+    assert oracle.verdict(row)["status"] == "VALID_FAIL"
+    monkeypatch.setattr(oracle, "reference_score", lambda *a: 0.0)
+    monkeypatch.setattr(oracle, "esd_justified", lambda: {"S3": True})
+    v = oracle.verdict(row)
+    assert v["status"] == "VALID_FAIL" and v["regulation_score"] == 57.1
+    assert v["esd_justified"] is False
 
 
 # ------------------------------------------------------------------- protocol

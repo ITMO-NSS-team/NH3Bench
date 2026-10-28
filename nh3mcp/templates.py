@@ -76,10 +76,14 @@ def build(sid: str, lang: str = "ru") -> dict:
         "minefields": ([] if t["esd_justified"] else
                        [{"tool": "act", "args_match": {"action_id": "SAFETY:ESD"},
                          "effect": "MAJ-2 unjustified ESD (score x0.6), not a failure"}]),
+        # The two numbers the verdict reads at run time, frozen here with the
+        # task set (DMCP-IH decision 0002); reference_scores are information.
         "oracle": {
             "kind": "state_condition",
             "source": "nh3mcp.oracle.verdict (metrics.bench_score_run)",
             "rule": DEFAULT_RULE,
+            "pass": {"prevented": True,
+                     "score_strictly_above": oracle.reference_score(sid, "regulation")},
             "esd_justified": t["esd_justified"],
             "reference_scores": {p: oracle.reference_score(sid, p)
                                  for p in ("null", "regulation", "oracle", "esd")},

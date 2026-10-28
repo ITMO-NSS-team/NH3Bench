@@ -16,7 +16,7 @@ import argparse
 import asyncio
 import json
 
-from nh3twin.policies import OraclePolicy
+from nh3twin.policies import ESDPolicy, OraclePolicy
 
 from . import oracle
 from .env import NH3Env
@@ -54,12 +54,12 @@ def run_oracle(env: NH3Env, app) -> None:
 
 
 def run_null(env: NH3Env, app) -> None:
-    """The harness looks once and leaves: the rest of the shift is inaction."""
-    _call(app, "observe", {})
+    """The harness never calls a tool: the whole shift is inaction."""
 
 
 def run_esd(env: NH3Env, app) -> None:
-    """The blunt answer: an emergency stop at once."""
+    """The blunt answer: an emergency stop at once, as π_esd makes it."""
+    env.charge_tokens(ESDPolicy.TOKENS)
     _call(app, "act", {"action_id": "SAFETY:ESD"})
 
 

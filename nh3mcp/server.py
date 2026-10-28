@@ -24,10 +24,15 @@ the stand and never for the agent:
                        ends or the server exits cleanly.
 
 The token clock. Virtual time is the model's output tokens / 40 per
-decision, and only the stand sees the model. Its gateway passes the tokens
-produced since the previous call in the call's ``_meta`` under
-``nh3bench/tokens`` (and must drop that key if the harness sets it). No
-agent tool takes a token count: an agent cannot set its own clock.
+decision, and only the stand sees the model. Its gateway passes the output
+tokens (reasoning included) produced since the previous tool call in the
+call's ``_meta`` under ``dmcp_ih/model_tokens`` -- the stand-wide key of
+DMCP-IH decision 0002: an integer; when one model turn makes several calls,
+the first carries the tokens and the rest 0; the gateway erases any
+``dmcp_ih/`` key the harness sets, and passes the key only to servers whose
+manifest says ``consumes: [model_tokens]``. ``nh3bench/tokens`` is accepted
+too, for use without the stand (nh3mcp.reproduce). No agent tool takes a
+token count: an agent cannot set its own clock.
 """
 
 from __future__ import annotations
@@ -44,7 +49,8 @@ from .env import WAIT_MAX, WAIT_MIN, NH3Env
 from .instance import Instance
 from . import texts
 
-META_TOKENS = "nh3bench/tokens"
+META_TOKENS = "dmcp_ih/model_tokens"     # the stand's key (DMCP-IH decision 0002)
+META_TOKENS_LOCAL = "nh3bench/tokens"     # the same, without the stand
 
 READ = ToolAnnotations(readOnlyHint=True, destructiveHint=False,
                        idempotentHint=False, openWorldHint=False)
@@ -68,8 +74,11 @@ def tokens_from_meta(ctx: Context | None) -> int:
     except (AttributeError, ValueError, LookupError):
         return 0
     extra = getattr(meta, "model_extra", None) or {}
+    # The stand's key wins; the two are never added, or a call carrying both
+    # would be charged twice.
+    value = extra.get(META_TOKENS, extra.get(META_TOKENS_LOCAL, 0))
     try:
-        return max(int(extra.get(META_TOKENS, 0)), 0)
+        return max(int(value), 0)
     except (TypeError, ValueError):
         return 0
 
@@ -122,6 +131,24 @@ def build_server(env: NH3Env, on_call=None, on_done=None) -> FastMCP:
         finally:
             after()
 
+    if env.inst.policy_pack:
+        # The policy pack (rule R9): the written regulation, as a tool -- every
+        # harness reads tools -- and as a resource for those that read those.
+        @app.tool(description=doc["read_regulation"], annotations=READ,
+                  meta=_cost(0, "deliberation"))
+        def read_regulation(ctx: Context) -> str:
+            fed(ctx)
+            out = env.read_regulation()
+            after()
+            return out
+
+        @app.resource("nh3bench://regulation", name="regulation",
+                      mime_type="text/plain",
+                      description="the operating instruction in force")
+        def regulation_text() -> str:
+            from .regulation import text
+            return text(lang)
+
     @app.resource("nh3bench://plant", name="plant", mime_type="text/plain",
                   description="the shift engineer's role and the plant")
     def plant() -> str:
@@ -134,7 +161,8 @@ def build_server(env: NH3Env, on_call=None, on_done=None) -> FastMCP:
 
     @app.prompt(name="task", description="the task this server was started with")
     def task() -> str:
-        return texts.task_prompt(env.ep.scen, lang, env.inst.clock)
+        return texts.task_prompt(env.ep.scen, lang, env.inst.clock,
+                                 env.inst.policy_pack)
 
     return app
 
@@ -177,6 +205,8 @@ def main(argv=None) -> None:
     ap.add_argument("--clock", default="tokens", choices=("tokens", "fixed", "wall"))
     ap.add_argument("--history", type=int, default=0)
     ap.add_argument("--label", default="mcp")
+    ap.add_argument("--policy-pack", action="store_true",
+                    help="дать агенту письменный регламент (read_regulation)")
     ap.add_argument("--http", type=int, default=0,
                     help="порт streamable-http; по умолчанию stdio")
     args = ap.parse_args(argv)
@@ -187,7 +217,7 @@ def main(argv=None) -> None:
         inst = Instance(instance_id=f"{args.scenario}-{args.clock}-{args.lang}",
                         scenario=args.scenario, lang=args.lang,
                         clock={"mode": args.clock}, history_keep=args.history,
-                        label=args.label)
+                        label=args.label, policy_pack=args.policy_pack)
     out = Path(args.out) if args.out else None
     env = NH3Env(inst)
     write_journal(env, out)             # an empty journal is a valid run: inaction

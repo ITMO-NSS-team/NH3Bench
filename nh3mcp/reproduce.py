@@ -36,7 +36,7 @@ from mcp.shared.memory import create_connected_server_and_client_session
 from .env import NH3Env
 from .instance import Instance
 from .oracle import ROOT
-from .server import META_TOKENS, build_server
+from .server import META_TOKENS_LOCAL, build_server
 
 KEYS = ("t_end_s", "CAT", "MAJ", "released_kg", "actions", "t_per_step",
         "tokens_per_step")
@@ -77,7 +77,7 @@ def reproduce(trace: str) -> dict:
                 if lang == "ru" and st["obs"] not in panel:
                     mismatched.append(i)
                 res = await s.call_tool("act", {"action_id": st["action"]},
-                                        meta={META_TOKENS: st["tokens"]})
+                                        meta={META_TOKENS_LOCAL: st["tokens"]})
                 panel = res.content[0].text
 
     asyncio.run(go())
