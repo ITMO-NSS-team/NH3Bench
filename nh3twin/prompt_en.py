@@ -296,6 +296,10 @@ PHRASES = [
     (r"\bработает в\b", "working in"),
     (r"\bготово через\b", "ready in"),
     (r"\bприбытие через\b", "arrives in"),
+    # dispatches in progress: "T001 OP-1 COIL_GAUGE (ещё 182 с)". Missed by
+    # check(), which walks replies, not the f-strings of build_observation:
+    # the English runs up to 2026-10 read this word in Russian.
+    (r"\(ещё (\d+) с\)", r"(\1 s left)"),
 ]
 PHRASES = [(re.compile(p), r) for p, r in PHRASES]
 

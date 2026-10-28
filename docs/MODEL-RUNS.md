@@ -331,6 +331,56 @@ flags, MAJ flags and end times.
 
 ---
 
+## User runs outside the published matrix
+
+Rows in `results/user/` are measured after publication and appear in the demo as their own
+category (`kind: "user"`); they never enter the published table. The English-track
+`google/gemini-3.7-flash` row is described in [BENCHMARK.md](BENCHMARK.md).
+
+### TypeSafe Jev 1.13 — a decision model
+
+`typesafe/jev-1.13` through OpenRouter's Decisions API (`--provider openrouter-decisions`,
+`OpenRouterDecisionPolicy` in `nh3twin/providers.py`). It is not a chat model: it takes a
+`state` and a typed `choice` question and returns one label with a probability
+distribution, no text. The adapter keeps the task as close to the LLM runs as the format
+allows: `state` is the LLM's system and user prompt byte for byte, the options are all 133
+commands (an LLM may also name a blocked one), and the label goes through the same
+`parse_action`. Russian task, history 14, seed 1.
+
+**The clock.** The reported `output_tokens` are label scoring, ~16 per option (60 for 3
+options, 580 for 32, 2183 for 133), and do not move with the state — measured on the live
+endpoint. Charging them as deliberation would add a fixed ~55 s a decision that no LLM pays,
+so the canonical row charges zero (`token_accounting: decision_no_generation`); it still
+pays the action latency and the 10 s tick. The upper bound charges them anyway.
+
+| run | S1 | S2 | S3 | S4 | S5 | S6 | mean |
+|---|---|---|---|---|---|---|---:|
+| canonical, 0 tokens (`results/user/jev.jsonl`) | CAT-3 | CAT-1 | 57.1 | CAT-3 | 84.2 | CAT-2 | **23.6** |
+| scoring tokens charged (`sensitivity/jev_clock-scoring.jsonl`) | CAT-3 | CAT-1 | 57.1 | 100.0 | 100.0 | CAT-2 | 42.9 |
+| `gated` harness (`sensitivity/jev_gated.jsonl`) | CAT-3 | 94.8 | 45.6 | 94.8 | 30.0 | CAT-1 | 44.2 |
+
+Scores by `metrics.bench_score_run`, as the demo computes them. With zero deliberation, three
+of the four catastrophes fall at the same second as π_null's (S1 614.0 s, S2 2446.5 s, S6
+784.5 s): in those three scenarios its decisions did not change the course of events.
+
+**The `gated` harness** (a sensitivity run, dev S1–S3 / held-out S4–S6): every worker
+report kept, `NO_OP` runs collapsed, a lean state, and an act-or-wait gate asked in the same
+request as the 132-way choice. It raises the mean from 23.6 to 44.2, but only because the
+emergency stop rises to the top of a flat distribution (choice confidence 0.1–0.2): it
+pressed ESD in five of six scenarios and still scores below the trivial π_esd (62.8). It is
+not a competent setting and is not shown in the demo.
+
+**Provenance.** The runs carry `commit: 677083e`, but were made from the working tree on
+top of it: the decision adapter (`providers.py`, the `--harness` and `--charge-scoring`
+flags of `tests/run_llm.py`) is committed after the runs, in the commit that adds them.
+Console logs are not kept.
+
+Artifacts: `results/user/jev.jsonl`, `results/user/traces/llm_typesafe_jev-1.13_S*_s1.jsonl`;
+`results/user/sensitivity/jev_{clock-scoring,gated}.jsonl` with their traces in
+`results/user/sensitivity/traces/` (outside the demo's glob, which is not recursive).
+
+---
+
 ## Limits common to every published run
 
 - **One draw per deterministic scenario.** The scenarios are deterministic by design, but

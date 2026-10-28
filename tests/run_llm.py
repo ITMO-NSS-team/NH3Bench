@@ -91,6 +91,14 @@ def main():
     # The canonical task language is Russian: the published runs answered it.
     # The English track is marked in the provenance and compared separately.
     ap.add_argument("--prompt-lang", default="ru", choices=("ru", "en"))
+    # Only for --provider openrouter-decisions: charge the label-scoring
+    # tokens to the clock (the upper-bound sensitivity run).
+    ap.add_argument("--charge-scoring", action="store_true")
+    # Only for --provider openrouter-decisions: how the task is laid out for a
+    # decision model (plain = the LLM's prompt verbatim). Part of the run's
+    # identity, like prompt_lang -- give it its own --tag.
+    ap.add_argument("--harness", default="plain",
+                    choices=("plain", "gate", "gated"))
     args = ap.parse_args()
 
     pol_name = f"llm:{args.model}" + (f":{args.tag}" if args.tag else "")
@@ -128,7 +136,9 @@ def main():
                                   temperature=args.temperature,
                                   max_tokens=args.max_tokens,
                                   prompt_lang=args.prompt_lang,
-                                  reasoning_effort=args.reasoning_effort)
+                                  reasoning_effort=args.reasoning_effort,
+                                  charge_scoring=args.charge_scoring,
+                                  harness=args.harness)
                 r = ep.run(pol)
                 r["policy"] = pol_name
                 seg = ep.plant.segments.get("EV-03")
@@ -160,6 +170,8 @@ def main():
                                 token_accounting=accounting_of(pol),
                                 prompt_lang=args.prompt_lang,
                                 commit=_commit())
+                if args.provider == "openrouter-decisions":
+                    r["llm"]["harness"] = args.harness
                 r["trace"] = os.path.relpath(trace, ROOT).replace("\\", "/")
             except Exception:
                 r = {"scenario": sid, "policy": pol_name, "seed": seed,

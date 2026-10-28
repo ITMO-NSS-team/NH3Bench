@@ -139,6 +139,24 @@ The task is Russian by default — that is what the published runs answered. `--
 en` gives the same task in English (role, catalog, panel and the plant's replies); it is
 reported as a separate column, since the model answers a different text.
 
+## Connect a harness over MCP
+
+The benchmark also runs as an MCP server, so an agent harness (OpenHands, Hermes, Claude
+Code, …) or a test stand such as DMCP-IH can drive the plant through tools: `observe`,
+`list_actions`, `act`, `wait`. One process is one shift. The plant keeps running while the
+agent thinks: the stand feeds the model's output tokens through the call's `_meta`, or a
+`fixed` clock charges each decision the same.
+
+```bash
+pip install -e ".[mcp]"
+python benchmark.py mcp --scenario S1 --out run/S1.json        # stdio; --http 8765 for HTTP
+python -m nh3mcp.oracle run/S1.journal.json                    # the verdict, by the same score
+```
+
+The oracle playbook driven through MCP reproduces the published oracle run field for field.
+Tools, the clock, the hidden outputs, the templates and what is not built yet:
+[nh3mcp/README.md](nh3mcp/README.md).
+
 ## Interactive demo
 
 One self-contained HTML file, opened straight from disk. `EN`/`RU` in the header.

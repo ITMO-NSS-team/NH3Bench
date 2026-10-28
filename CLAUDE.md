@@ -60,7 +60,12 @@ nh3twin/            the digital twin + agent layer (import root)
   scenarios.py      the six benchmark scenarios (v2 + S6)
   runner.py         plain simulation runs without an agent
   providers.py      provider layer: OpenRouter adapter + factory; llm_policy.py untouched
-benchmark.py        user-facing CLI: run / replay / report / validate / list-*
+nh3mcp/             the benchmark as an MCP server (README there): env.py (the loop turned
+                    inside out + hidden control), server.py (agent tools), oracle.py (truth,
+                    verdict), reference.py, templates.py + templates/ (DMCP-IH), tests/
+benchmark.py        user-facing CLI: run / replay / report / validate / mcp / list-*
+pyproject.toml      `pip install -e ".[mcp]"` for stands and harnesses (editable: oracle reads results/)
+DMCP-IH/            a separate git repo (the harness test stand), not part of this one
 tests/              run_baselines.py (calibration matrix), run_regimes.py (regime sanity),
                     run_llm.py (LLM episodes), replay_llm.py (re-derive from traces),
                     report_metrics.py (the results table),
@@ -130,6 +135,16 @@ python tests/validate_prompt_en.py     # ~4 min: seven warm-ups
 python3 tests/calibrate_ponr.py --scenarios S1 --out results/ponr_S1.json
 python3 tests/replay_llm.py      # re-derive agent episodes from transcripts
 python3 tests/report_metrics.py  # the full results table
+
+# MCP server (nh3mcp/README.md). The repo's .venv has mcp, pyyaml and pytest.
+python benchmark.py mcp --scenario S1 --out run/S1.json   # one shift, stdio
+python -m nh3mcp.oracle run/S1.journal.json               # replay -> verdict
+python -m nh3mcp.reference          # gate: oracle passes, wrong answer fails, all six
+python -m nh3mcp.templates --check  # templates match scenarios.py
+python -m nh3mcp.reproduce "results/llm_traces/llm_gpt-5.6-luna_S*_s1.jsonl"  # a published
+                                    # run through an MCP session: panels + outcome
+                                    # (Claude traces are v2.0 physics: outcome only)
+NH3MCP_CACHE=<dir> python -m pytest -q nh3mcp/tests       # ~2 min warm, +35 s per cold scenario
 
 # Rebuild expert artifacts
 python3 viz/expert_data.py && python3 viz/expert_figs.py && python3 viz/build_expert_doc.py
@@ -263,6 +278,23 @@ is recorded in `docs/DECISIONS.md`.
 - **Test runs must not write into `results/llm_traces/`.** `replay_llm.py` collects that
   directory by mask, so a trial run would be appended to the published matrix as a
   full-fledged row. Use `--trace-dir` (`benchmark.py` derives it from `--out`).
+- **Over MCP, the canonical path is the published benchmark.** One `act` per decision with
+  fed tokens makes exactly `Episode.run`'s `advance()` calls (think → command → latency →
+  tick, the think applied even at zero because `advance` takes at least one step).
+  `test_oracle_through_mcp_is_the_published_oracle_run` compares every field; change the
+  order in `NH3Env.act` and it fails.
+- **Over MCP the agent never sets its own clock.** Tokens reach the clock only from the
+  stand (`_meta["nh3bench/tokens"]`, or `NH3Env.charge_tokens`); no agent tool takes a
+  token count. An unfed token clock is flagged (`clock_fed: false`), never silently scored
+  as comparable.
+- **An MCP run's outcome is its journal, not the server's survival.** A stand kills the
+  server ~2 s after the harness disconnects and the play-out takes longer. The journal
+  (calls + the deliberation each was charged + a physics digest) is rewritten after every
+  call, and `env.replay` re-derives the run exactly — on the `wall` clock too — or refuses
+  on another physics version.
+- **`server.py` never imports `oracle.py`.** Titles, hazards, traps and key actions name
+  the answer; the R3 test scans every tool, resource, prompt and reply for them in both
+  languages.
 - **Two runs are compared by aligning their command sequences, not their clocks.**
   `diffAlign` is an LCS over action ids: the same command issued a minute later is a match
   with a time shift, not a divergence. `diffPairBlocks` then pairs the two sides inside a
@@ -558,6 +590,12 @@ will silently send every task start back to a full warm-up.
   had its own short captions ("Молоко", "Уровень ЦР-НД"); reusing `TAGMETA.ru`
   ("t молока", "Уровень ЦР-НД (датчик)") silently rewrote the Russian interface. Adding
   English is not a licence to restyle the Russian — see the word-level diff in §5.
+- **On stdio, stdout is the protocol.** Anything the MCP server (or `benchmark.py mcp`)
+  prints there corrupts the session; warnings go to stderr.
+- **`prompt_en.check()` walks replies, not `build_observation`'s f-strings.** The pending
+  dispatch "(ещё 182 с)" reached the English track untranslated until 2026-10-28 (the
+  gemini-3.7-flash English traces show it). The MCP test that executes the English panel
+  and asserts no Cyrillic now covers it.
 - **`№` is Russian typography.** "Task №4" reads as a typo in English; the number is
   formatted by `scenNo(sid)`, which drops the sign outside Russian. Same class of thing as
   the units, which deliberately do *not* change (§5).
@@ -593,6 +631,14 @@ Short version of where things stand:
   measured on one model across all six scenarios (`google/gemini-3.7-flash`: mean 17.8,
   Regulation Gap −23.2, three catastrophes); it is a second, separately labelled column,
   not a replacement. `results/user/runs.jsonl` + `results/user/traces/`.
+
+- The benchmark runs as an MCP server (`nh3mcp/`) for harness test stands (DMCP-IH issue
+  #17, due 2026-11-13): four agent tools, a three-mode clock, journal + replay, oracle with
+  the published score, six generated templates. Open there: a hidden control endpoint on
+  the wire, the gateway feeding tokens, the stand's manifest entry, R7/R8/R9/R10.
+- TypeSafe Jev (a decision model, `openrouter-decisions`) is a user row:
+  `results/user/jev.jsonl`, sensitivity runs in `results/user/sensitivity/`; see
+  `docs/MODEL-RUNS.md`.
 
 Open, in rough priority order: the token-budget frontier (the safety-latency
 trade-off is still supported by a single point per model), the expert validation round,

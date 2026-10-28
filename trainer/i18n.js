@@ -1096,7 +1096,9 @@ function replyMarks(t) {
   const x = String(t == null ? "" : t);
   if (LANG !== "en") return x;
   return x.replace(/\[рассуждение\]/g, "[reasoning]")
-          .replace(/\[ответ\]/g, "[answer]");
+          .replace(/\[ответ\]/g, "[answer]")
+          // a decision model has no reasoning, only the choice distribution
+          .replace(/\[распределение\]/g, "[distribution]");
 }
 
 // A short excerpt for the panel: a section marker on its own says nothing, so

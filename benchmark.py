@@ -8,6 +8,7 @@ NH3Bench -- running the benchmark on your own model.
     python benchmark.py run --provider openrouter --model google/gemini-3.7-flash --scenarios S1
     python benchmark.py replay
     python benchmark.py report
+    python benchmark.py mcp --scenario S1 --out run/S1.json   # MCP server
 
 This is a thin wrapper: a run is executed by tests/run_llm.py, the
 re-derivation by tests/replay_llm.py, and the full table by
@@ -175,7 +176,7 @@ def cmd_run(args):
         if os.path.abspath(out) == os.path.join(ROOT, "results", "llm.jsonl")
         else os.path.splitext(out)[0] + "_traces")
 
-    if args.provider == "openrouter":
+    if args.provider.startswith("openrouter"):
         from nh3twin.providers import load_dotenv
         load_dotenv(os.path.join(ROOT, ".env"))
         if not os.environ.get(args.api_key_env):
@@ -325,7 +326,7 @@ def main():
 
     r = sub.add_parser("run", help="прогнать модель по задачам")
     r.add_argument("--provider", default="openrouter",
-                   help="openrouter | claude-cli")
+                   help="openrouter | openrouter-decisions | claude-cli")
     r.add_argument("--model", required=True,
                    help="слаг модели, например google/gemini-3.7-flash")
     r.add_argument("--scenarios", default=ALL_SIDS)
@@ -345,6 +346,14 @@ def main():
                    help="куда писать пошаговые протоколы")
 
     sub.add_parser("replay", help="пересчитать прогоны по протоколам")
+
+    # Listed for the help only: its flags belong to the server's own parser,
+    # so the command is dispatched before this parser sees them (below).
+    sub.add_parser("mcp", help="одна смена как MCP-сервер (stdio или HTTP); "
+                               "флаги -- как у python -m nh3mcp.server")
+
+    if sys.argv[1:2] == ["mcp"]:
+        return cmd_mcp(sys.argv[2:])
 
     rp = sub.add_parser("report", help="таблица результатов")
     rp.add_argument("--full", action="store_true",
@@ -367,6 +376,13 @@ def main():
         "replay": cmd_replay,
         "report": cmd_report,
     }[args.cmd](args)
+
+
+def cmd_mcp(argv):
+    # Nothing may be printed here: on stdio, stdout is the protocol.
+    from nh3mcp.server import main as serve
+    serve(argv)
+    return 0
 
 
 if __name__ == "__main__":

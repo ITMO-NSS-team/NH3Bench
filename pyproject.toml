@@ -1,0 +1,27 @@
+# Lets another project (a test stand, a harness) install the twin and its MCP
+# server: `pip install -e "<path to this repo>[mcp]"`. Editable on purpose --
+# the oracle reads the reference runs from results/ next to the sources.
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nh3bench"
+version = "0.1.0"
+description = "NH3Ops-Bench: an ammonia refrigeration plant twin for LLM agents, and its MCP server"
+requires-python = ">=3.11"
+dependencies = ["numpy"]
+
+[project.optional-dependencies]
+mcp = ["mcp>=1.9,<2", "pyyaml"]
+dev = ["mcp>=1.9,<2", "pyyaml", "pytest"]
+
+[project.scripts]
+nh3bench-mcp = "nh3mcp.server:main"
+
+[tool.setuptools]
+packages = ["nh3twin", "nh3mcp"]
+
+[tool.setuptools.package-data]
+nh3twin = ["_nh3_table.npz"]
+nh3mcp = ["templates/*.yaml"]

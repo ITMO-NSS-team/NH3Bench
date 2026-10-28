@@ -24,3 +24,15 @@ results/metrics_summary.json
 
 trainer/snap/
 trainer/demo_manifest.json
+
+# console logs of runs, at any depth (results/*.log covered only the top level)
+results/**/*.log
+
+# the harness test stand is its own git repository; committed here it would
+# become a broken gitlink. Use a submodule if it has to be pinned.
+DMCP-IH/
+
+# MCP server: editable install, tests, example output (records hold the truth)
+*.egg-info/
+.pytest_cache/
+run/
