@@ -22,6 +22,8 @@ from dataclasses import dataclass, field
 from typing import Optional
 import time
 
+import numpy as np
+
 from . import props as pr
 from .plant import Plant, MODE_NAMES
 from .control import PLC, AlarmSystem, SafetySystem
@@ -113,6 +115,66 @@ _INSTRUMENTS = {
 # separate instrument and stays truthful: S3 is built on that discrepancy.
 _EVAP_T_FROM_P = {"T_EVAP_LP": "P_SUC_LP", "T_EVAP_IP": "P_SUC_IP"}
 
+# Instrument noise: what the twin seed varies. Seed 1 is the calibrated,
+# published instance and stays noise-free, so every published run and every
+# π_reg threshold keeps reproducing byte for byte. Seed k >= 2 plays the same
+# incident through instruments with their own random error: a draw per
+# (seed, polling tick), so polling twice inside one tick shows the same panel
+# and nothing is gained by averaging repeated reads. Sigma per instrument, in
+# its display unit ("abs") or as a fraction of the reading ("rel"). Sizes are
+# instrument grade, well below every scenario's signature (S3's 5-6 K
+# saturation gap, S2's level, S5/S6's tens of ppm).
+NOISE_FREE_SEED = 1
+_NOISE = {
+    "P_SUC_LP": ("rel", 0.003), "P_SUC_IP": ("rel", 0.003),
+    "P_COND": ("rel", 0.003),
+    "T_COND": ("abs", 0.1), "T_MILK": ("abs", 0.1), "T_ICEWATER": ("abs", 0.1),
+    "T_ROOM_CHILL": ("abs", 0.1), "T_ROOM_LT": ("abs", 0.1),
+    "T_ROOM_BLAST": ("abs", 0.1),
+    "LEVEL_VE_LP": ("abs", 0.3), "LEVEL_VE_IP": ("abs", 0.3),
+    "LEVEL_VE_HP": ("abs", 0.3),
+    "M_ICE_T": ("rel", 0.005), "POWER_KW": ("rel", 0.005),
+    "Q_REJ_KW": ("rel", 0.005),
+    "NH3_MACHINEROOM_PPM": ("abs", 0.5), "NH3_HALL_PPM": ("abs", 0.5),
+}
+_PPM_ZONES = {"NH3_MACHINEROOM_PPM": "MACHINE_ROOM", "NH3_HALL_PPM": "HALL"}
+# A gas detector reads a clean zero in clean air; noise starts above this.
+_PPM_NOISE_FLOOR = 1.0
+
+
+def _frozen(p: Plant, tag: str) -> bool:
+    """A stuck or open instrument shows a fixed value; it does not shake."""
+    if tag in _INSTRUMENTS:
+        vessel, kind = _INSTRUMENTS[tag]
+        f = p.sensor_faults.get(f"{kind.upper()}_{vessel}")
+        return bool(f) and f["type"] in ("stuck", "open")
+    if tag in _PPM_ZONES:
+        z = p.disp.zones.get(_PPM_ZONES[tag])
+        return bool(z) and z.detector_failed
+    return False
+
+
+def _add_noise(p: Plant, out: dict) -> None:
+    """Instrument error of seed p.seed on the readings in ``out`` (in place)."""
+    tick = int(p.t // POLL_PERIOD)
+    z = np.random.default_rng([p.seed, tick]).standard_normal(len(_NOISE))
+    gauges = {p_tag: out.get(p_tag) for p_tag in _EVAP_T_FROM_P.values()}
+    for (tag, (mode, sigma)), e in zip(_NOISE.items(), z.tolist()):
+        if tag not in out or _frozen(p, tag):
+            continue
+        v = out[tag]
+        if tag in _PPM_ZONES:
+            if v >= _PPM_NOISE_FLOOR:
+                out[tag] = max(v + sigma * e, 0.0)
+        else:
+            out[tag] = v * (1.0 + sigma * e) if mode == "rel" else v + sigma * e
+    # The evaporating temperatures are read off the suction gauges, so they
+    # move with the gauge's error.
+    for t_tag, p_tag in _EVAP_T_FROM_P.items():
+        before = gauges[p_tag]
+        if t_tag in out and before and out[p_tag] != before:
+            out[t_tag] += float(pr.Tsat(out[p_tag] * 1e5) - pr.Tsat(before * 1e5))
+
 
 def indicated_tags(p: Plant, tg: dict) -> dict:
     """
@@ -142,6 +204,8 @@ def indicated_tags(p: Plant, tg: dict) -> dict:
         if t_tag in out and p.sensor_faults.get(
                 f"PRESSURE_{_INSTRUMENTS[p_tag][0]}"):
             out[t_tag] = float(pr.Tsat(out[p_tag] * 1e5)) - 273.15
+    if p.seed != NOISE_FREE_SEED:
+        _add_noise(p, out)
     return out
 
 

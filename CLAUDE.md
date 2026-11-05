@@ -184,8 +184,10 @@ is recorded in `docs/DECISIONS.md`.
 - **The action catalog is identical in every scenario.** No scenario-specific magic
   actions; the random policy has access to exactly what the LLM has.
 - **Scenarios are single deterministic instances (seed=1).** Randomization was
-  deliberately minimized to keep evaluation cost down; only the random *policy* varies by
-  seed. Do not add per-seed scenario randomization without discussing cost.
+  deliberately minimized to keep evaluation cost down. Seed 1 is noise-free and is the one
+  published; seeds ≥ 2 add instrument noise on the panel only (`episode._NOISE`, drawn per
+  seed and polling tick; stuck sensors stay stuck), and the random *policy* varies by seed.
+  Do not add other per-seed scenario randomization without discussing cost.
 - **The trainer executes the real twin** via Pyodide. Never reimplement physics in JS —
   divergence between the expert's trainer and the agent's benchmark would invalidate
   expert validation.

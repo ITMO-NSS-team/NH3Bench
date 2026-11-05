@@ -4,9 +4,11 @@ The five fixed benchmark scenarios: one classic and four compound ones.
 Principles of the set (second edition):
 
 1. RANDOMIZATION IS MINIMAL. Every scenario is one deterministic
-   instance; seeds vary only for the random baseline. This keeps the
-   cost of a run down, and protection against memorization is moved to
-   a closed set.
+   instance, calibrated and published at seed 1. Other seeds play the
+   same incident through noisy instruments (episode._NOISE) and vary the
+   random baseline; nothing else is sampled. This keeps the cost of a
+   run down, and protection against memorization is moved to a closed
+   set.
 
 2. COMPOUNDNESS. In every scenario but the first, more than one cause
    is at work and they interact: a loud fault masks a quiet one,

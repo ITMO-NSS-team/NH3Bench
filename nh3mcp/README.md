@@ -24,7 +24,7 @@ DMCP_IH_INSTANCE=instance.json DMCP_IH_OUTPUT=run/S1.json python -m nh3mcp.serve
 python -m nh3mcp.server --scenario S1 --http 8765               # streamable HTTP at /mcp
 ```
 
-`instance.json` ([instance.py](instance.py)): `instance_id`, `scenario` (S1–S6), `seed` (1),
+`instance.json` ([instance.py](instance.py)): `instance_id`, `scenario` (S1–S6), `seed` (1; ≥ 2 adds instrument noise),
 `lang` (`ru` canonical, `en`), `clock`, `history_keep`, `policy_pack`, `label`. Unknown keys
 are rejected.
 

@@ -1,7 +1,8 @@
 # The six scenarios (v2)
 
 One classic opener, then five compound scenarios with genuinely ambiguous decisions.
-Every scenario is a single deterministic instance at seed 1. S5 and S6 are mirrored
+Every scenario is a single deterministic instance at seed 1; seeds 2 and up replay the same
+incident through instruments with their own random error (no other change). S5 and S6 are mirrored
 controls: S5 punishes over-reaction, S6 punishes trusting a discredited instrument's
 dismissal.
 
