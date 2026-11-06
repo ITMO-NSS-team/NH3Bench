@@ -89,6 +89,32 @@ def test_r1_same_instance_same_responses():
     assert run_sequence(a) == run_sequence(b)
 
 
+def test_r1_holds_on_a_noisy_seed():
+    _, a = make(seed=2, clock={"mode": "fixed"})
+    _, b = make(seed=2, clock={"mode": "fixed"})
+    assert run_sequence(a) == run_sequence(b)
+
+
+def test_twin_seed_is_instrument_noise_on_the_same_incident():
+    """Seed 1 is the published instance; seed 2 reads the same plant through noisy instruments."""
+    one, a = make(seed=1, clock={"mode": "fixed"})
+    two, b = make(seed=2, clock={"mode": "fixed"})
+    assert run_sequence(a) != run_sequence(b)
+    assert one.ep.plant.tags() == two.ep.plant.tags()      # the truth is the same plant
+
+
+def test_a_stuck_instrument_does_not_shake():
+    """S2's frozen level must stay frozen on a noisy seed, or the trap gives itself away."""
+    env, app = make("S2", seed=2, clock={"mode": "fixed"})
+    for _ in range(3):                                    # past the freeze at t0 + 900 s
+        call(app, "wait", {"seconds": 450})
+    shown = set()
+    for _ in range(4):
+        m = re.search(r"LEVEL_VE_LP ([\d.]+)", text_of(call(app, "wait", {"seconds": 10})))
+        shown.add(m.group(1))
+    assert shown == {"36.00"}
+
+
 def test_r2_reset_gives_the_initial_state():
     env, app = make(clock={"mode": "fixed"})
     first = text_of(call(app, "observe"))

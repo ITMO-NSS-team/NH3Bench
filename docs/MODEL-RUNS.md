@@ -281,7 +281,11 @@ the run made only 340 calls against 934 at `none`.
 ### Ten twin seeds at fixed `medium`
 
 Seeds 1–10 over all six scenarios; seed 1 reuses the published baseline, seeds 2–10 are 54
-new episodes. The ten complete-run scores were 37.5, 38.4, 37.4, 35.1, 37.6, 35.2, 54.1,
+new episodes. These runs predate instrument noise (`nh3twin/episode.py`, `_NOISE`): the
+twin then ignored its seed, so all ten seeds showed the same panel and the spread below is
+model sampling only. On the current twin seeds 2–10 read through noisy instruments, and a
+rerun would not be the same experiment; replaying the recorded actions still gives the same
+outcomes, since the noise touches only the panel. The ten complete-run scores were 37.5, 38.4, 37.4, 35.1, 37.6, 35.2, 54.1,
 38.3, 52.5, 55.0 — mean **42.11**, sample SD **8.21**, median 37.95, range 35.1–55.0,
 exploratory bootstrap 95 % CI 37.52–47.26.
 

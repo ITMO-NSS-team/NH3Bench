@@ -18,7 +18,8 @@ from nh3twin.episode import THINK_RATE
 
 # The six benchmark scenarios. A scenario is a single deterministic instance
 # (seed 1, CLAUDE.md §4); the seed is still exposed because the twin-seed
-# sensitivity studies vary it.
+# sensitivity studies vary it. Seed k >= 2 is the same incident read
+# through noisy instruments (nh3twin.episode._NOISE); seed 1 has none.
 SCENARIO_IDS = ("S1", "S2", "S3", "S4", "S5", "S6")
 
 # Deliberation charged per decision in the `fixed` clock: the median, over
